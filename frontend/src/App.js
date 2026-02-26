@@ -194,13 +194,16 @@ function App() {
       });
       if (res.ok) {
         const saved = await res.json();
-        // Replace temp entry locally
-        setEntries(prev => prev.map(e => e.tempId === tempId ? saved : e));
+        // Build a saved entry object client-side using returned id so it appears immediately
+        const savedEntry = { ...newEntry, id: (saved && saved.id) ? saved.id : undefined };
+        setEntries(prev => prev.map(e => e.tempId === tempId ? savedEntry : e));
         // Then refresh full list from backend to ensure UI matches DB
         try {
           const entriesRes = await fetch('http://localhost:4000/api/entries', { credentials: 'include' });
           const data = await entriesRes.json();
           if (Array.isArray(data)) setEntries(data);
+          // refresh recent meals so the Recent modal shows newly added meals
+          fetchRecent(10);
         } catch (err) {
           // ignore refresh error
         }
@@ -248,6 +251,86 @@ function App() {
       })
       .catch(() => setEntries([]));
   }, []);
+
+  // Recent and favorites state
+  const [recentOpen, setRecentOpen] = useState(false);
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
+  const [recentMeals, setRecentMeals] = useState([]);
+  const [favorites, setFavorites] = useState([]);
+
+  // Fetch favorites on mount
+  useEffect(() => {
+    fetch('http://localhost:4000/api/favorites')
+      .then(r => r.json())
+      .then(d => Array.isArray(d) ? setFavorites(d) : setFavorites([]))
+      .catch(() => setFavorites([]));
+  }, []);
+
+  async function fetchRecent(limit = 10) {
+    try {
+      const res = await fetch(`http://localhost:4000/api/recent?limit=${limit}`);
+      const data = await res.json();
+      setRecentMeals(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setRecentMeals([]);
+    }
+  }
+
+  async function addFavoriteFromEntry(entryObj) {
+    try {
+      await fetch('http://localhost:4000/api/favorites', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: entryObj.name, calories: entryObj.calories, protein: entryObj.protein, carbs: entryObj.carbs, fat: entryObj.fat })
+      });
+      const res = await fetch('http://localhost:4000/api/favorites');
+      const data = await res.json();
+      setFavorites(Array.isArray(data) ? data : []);
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  async function addMealFromTemplate(template) {
+    try {
+      const newEntry = { ...template, date: selectedDate };
+      const res = await fetch('http://localhost:4000/api/entry', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newEntry)
+      });
+      if (res.ok) {
+        // refresh entries
+        const entriesRes = await fetch('http://localhost:4000/api/entries');
+        const data = await entriesRes.json();
+        if (Array.isArray(data)) setEntries(data);
+      }
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  async function removeFavorite(id) {
+    try {
+      await fetch(`http://localhost:4000/api/favorites/${id}`, { method: 'DELETE' });
+      const res = await fetch('http://localhost:4000/api/favorites');
+      const data = await res.json();
+      setFavorites(Array.isArray(data) ? data : []);
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  function findFavoriteForEntry(entryObj) {
+    if (!entryObj || !favorites) return null;
+    return favorites.find(f => String(f.name) === String(entryObj.name) && String(f.calories) === String(entryObj.calories));
+  }
+
+  async function toggleFavoriteForEntry(entryObj) {
+    const existing = findFavoriteForEntry(entryObj);
+    if (existing) {
+      await removeFavorite(existing.id);
+    } else {
+      await addFavoriteFromEntry(entryObj);
+    }
+  }
 
   const handlePaste = (e) => {
     if (e.clipboardData && e.clipboardData.items) {
@@ -524,6 +607,67 @@ function App() {
         >
           Calander
         </button>
+        {/* Cook Book buttons moved under Upload box */}
+
+        {recentOpen && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#000a', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: cardBg, borderRadius: 12, padding: 16, minWidth: 320 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ color: accent, margin: 0 }}>Recent Meals</h3>
+                <button onClick={() => setRecentOpen(false)} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 18 }}>&times;</button>
+              </div>
+              <div style={{ maxHeight: 320, overflow: 'auto' }}>
+                {recentMeals.length === 0 && <div style={{ color: '#aaa' }}>No recent meals</div>}
+                {recentMeals.map((r, idx) => (
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${border}` }}>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{r.name}</div>
+                      <div style={{ color: '#aaa', fontSize: 13 }}>{r.calories} kcal</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <button onClick={() => { addMealFromTemplate(r); setRecentOpen(false); }} style={{ background: accent, color: darkBg, border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Add</button>
+                      {(() => {
+                        const fav = findFavoriteForEntry(r);
+                        const isFav = !!fav;
+                        return (
+                          <button onClick={() => toggleFavoriteForEntry(r)} aria-label={isFav ? 'Unfavorite' : 'Favorite'} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: isFav ? '#f6c600' : '#7b848b', padding: 4 }}>
+                            {isFav ? '★' : '☆'}
+                          </button>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {favoritesOpen && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#000a', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: cardBg, borderRadius: 12, padding: 16, minWidth: 320 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ color: accent, margin: 0 }}>Favorites</h3>
+                <button onClick={() => setFavoritesOpen(false)} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 18 }}>&times;</button>
+              </div>
+              <div style={{ maxHeight: 320, overflow: 'auto' }}>
+                {favorites.length === 0 && <div style={{ color: '#aaa' }}>No favorites yet</div>}
+                {favorites.map((f) => (
+                  <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${border}` }}>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{f.name}</div>
+                      <div style={{ color: '#aaa', fontSize: 13 }}>{f.calories} kcal</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => { addMealFromTemplate(f); setFavoritesOpen(false); }} style={{ background: accent, color: darkBg, border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Add</button>
+                      <button onClick={() => removeFavorite(f.id)} style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Remove</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
         {calendarOpen && (
           <div style={{
             position: 'fixed',
@@ -564,6 +708,7 @@ function App() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <h1 style={{ color: accent, letterSpacing: 1, fontWeight: 700, marginBottom: 0 }}>CalTrack</h1>
         </div>
+        {/* Cook Book section moved under Upload box */}
         <div
           style={{
             background: cardBg,
@@ -572,12 +717,21 @@ function App() {
             marginBottom: 20,
             border: `1px solid ${border}`,
             boxShadow: '0 2px 8px #0002',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
           }}
         >
-          <label style={{ fontWeight: 500 }}>
-            Daily Calorie Limit:{' '}
-            <span style={{ marginLeft: 8, color: textColor, fontWeight: 600 }}>{dailyLimit}</span>
-          </label>
+          <div>
+            <label style={{ fontWeight: 500 }}>
+              Daily Calorie Limit:{' '}
+              <span style={{ marginLeft: 8, color: textColor, fontWeight: 600 }}>{dailyLimit}</span>
+            </label>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 12, color: '#aaa' }}>Calories Remaining</div>
+            <div style={{ fontWeight: 700, color: accent, fontSize: 18 }}>{Math.max(0, Math.round(dailyLimit - total.calories))} kcal</div>
+          </div>
         </div>
         {/* Upload */}
         <div
@@ -633,6 +787,45 @@ function App() {
             <pre style={{ color: '#aaa', marginTop: 8, fontSize: 13, whiteSpace: 'pre-wrap' }}>{ocrText}</pre>
           )}
         </div>
+        {/* Cook Book section with Recent + Favorites buttons */}
+        <div style={{ background: cardBg, borderRadius: 12, padding: 12, marginBottom: 16, border: `1px solid ${border}` }}>
+          <label style={{ fontWeight: 600, marginBottom: 8, display: 'block', color: textColor }}>Cook Book</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              onClick={() => { fetchRecent(10); setRecentOpen(true); }}
+              style={{
+                background: accent,
+                color: darkBg,
+                border: 'none',
+                borderRadius: 6,
+                padding: '8px 18px',
+                fontWeight: 600,
+                fontSize: 16,
+                cursor: 'pointer',
+                boxShadow: '0 1px 4px #0003',
+              }}
+            >
+              Recent
+            </button>
+            <button
+              onClick={() => { setFavoritesOpen(true); }}
+              style={{
+                background: accent,
+                color: darkBg,
+                border: 'none',
+                borderRadius: 6,
+                padding: '8px 18px',
+                fontWeight: 600,
+                fontSize: 16,
+                cursor: 'pointer',
+                boxShadow: '0 1px 4px #0003',
+              }}
+            >
+              Favorites
+            </button>
+          </div>
+        </div>
+
         <form onSubmit={handleAdd} style={{ background: cardBg, borderRadius: 8, padding: 12, marginBottom: 16, border: `1px solid ${border}`, boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -695,8 +888,8 @@ function App() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-              <button type="submit" style={{ background: accent, color: darkBg, border: 'none', borderRadius: 6, padding: '8px 12px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Add</button>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
+              <button type="submit" style={{ background: accent, color: darkBg, border: 'none', borderRadius: 8, padding: '10px 18px', fontWeight: 700, cursor: 'pointer', fontSize: 16 }}>Add</button>
             </div>
           </div>
         </form>
@@ -811,7 +1004,17 @@ function App() {
                     {e.carbs && ` | Carbs: ${e.carbs}g`}
                     {e.fat && ` | Fat: ${e.fat}g`}
                   </span>
-                  <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 8 }}>
+                  <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {/* Star favorite button */}
+                    {(() => {
+                      const fav = findFavoriteForEntry(e);
+                      const isFav = !!fav;
+                      return (
+                        <button onClick={() => toggleFavoriteForEntry(e)} aria-label={isFav ? 'Unfavorite' : 'Favorite'} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: isFav ? '#f6c600' : '#7b848b', padding: 4 }}>
+                          {isFav ? '★' : '☆'}
+                        </button>
+                      );
+                    })()}
                     <button onClick={() => handleEditEntry(i)} style={{ background: accent, color: '#fff', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 13 }}>Edit</button>
                     <button onClick={() => handleDeleteEntry(i)} style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 13 }}>Delete</button>
                   </div>

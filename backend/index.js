@@ -129,7 +129,46 @@ app.delete('/api/entry/:id', async (req, res) => {
 // Allow anyone to get all entries (no auth)
 app.get('/api/entries', async (req, res) => {
   await db.read();
-  res.json(db.data.entries);
+  res.json(db.data.entries || []);
+});
+
+// Get recent entries (last N)
+app.get('/api/recent', async (req, res) => {
+  await db.read();
+  const limit = parseInt(req.query.limit || '10', 10);
+  const entries = (db.data.entries || []).slice().sort((a, b) => {
+    return new Date(b.date) - new Date(a.date);
+  }).slice(0, limit);
+  res.json(entries);
+});
+
+// Favorites endpoints (simple saved meal templates)
+app.get('/api/favorites', async (req, res) => {
+  await db.read();
+  res.json(db.data.favorites || []);
+});
+
+app.post('/api/favorites', async (req, res) => {
+  await db.read();
+  if (!db.data.favorites) db.data.favorites = [];
+  // assign id
+  let maxId = 0;
+  db.data.favorites.forEach(f => { if (f.id && Number(f.id) > maxId) maxId = Number(f.id); });
+  const fav = { ...req.body, id: maxId + 1 };
+  db.data.favorites.push(fav);
+  await db.write();
+  res.json({ success: true, id: fav.id });
+});
+
+app.delete('/api/favorites/:id', async (req, res) => {
+  await db.read();
+  const id = req.params.id;
+  const before = (db.data.favorites || []).length;
+  db.data.favorites = (db.data.favorites || []).filter(f => String(f.id) !== String(id));
+  const after = db.data.favorites.length;
+  await db.write();
+  if (after < before) res.json({ success: true });
+  else res.status(404).json({ error: 'Favorite not found' });
 });
 
 // Daily calorie limit endpoints
@@ -167,6 +206,11 @@ app.listen(PORT, () => {
     // Ensure calorieLimit exists
     if (typeof db.data.calorieLimit === 'undefined') {
       db.data.calorieLimit = 2000;
+      await db.write();
+    }
+    // Ensure favorites array exists
+    if (!db.data.favorites) {
+      db.data.favorites = [];
       await db.write();
     }
   })();

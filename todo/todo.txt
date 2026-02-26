@@ -1,7 +1,8 @@
 fix calander date thingy
 barcode DONE
-delete or modify entered items
+delete or modify entered items DONE
 login stuff
-image upload serving options
+image upload serving options DONE
 cal limit per week thingy
-better cal input
+better cal input DONE
+save foods DONE
