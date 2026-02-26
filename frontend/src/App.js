@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import MonthCalendar from './MonthCalendar';
 import Tesseract from 'tesseract.js';
 
 const darkBg = '#181c20';
@@ -12,6 +13,14 @@ const inputBorder = '#353b41';
 const placeholder = '#7b848b';
 
 function App() {
+  // Calendar state
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState('');
   const [ocrText, setOcrText] = useState('');
@@ -106,13 +115,16 @@ function App() {
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!entry.name || !entry.calories) return;
-    // Save to backend
+    // Save to backend, using selectedDate with current local time for the entry's date
+    const now = new Date();
+    const timeStr = now.toTimeString().slice(0,8); // HH:MM:SS
+    const entryWithDate = { ...entry, date: `${selectedDate}T${timeStr}` };
     try {
       const res = await fetch('http://localhost:4000/api/entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(entry),
+        body: JSON.stringify(entryWithDate),
       });
       if (res.ok) {
         // Refetch entries after save
@@ -126,7 +138,12 @@ function App() {
     }
   };
 
-  const total = entries.reduce(
+  // Filter entries by selected date (YYYY-MM-DD)
+  const filteredEntries = entries.filter(e => {
+    if (!e.date) return false;
+    return e.date.slice(0, 10) === selectedDate;
+  });
+  const total = filteredEntries.reduce(
     (acc, e) => ({
       calories: acc.calories + Number(e.calories),
       protein: acc.protein + Number(e.protein),
@@ -159,6 +176,77 @@ function App() {
           padding: 24,
         }}
       >
+        {/* Logs button and calendar modal */}
+        <button
+          style={{
+            background: accent,
+            color: darkBg,
+            border: 'none',
+            borderRadius: 6,
+            padding: '8px 18px',
+            fontWeight: 600,
+            fontSize: 16,
+            marginBottom: 16,
+            cursor: 'pointer',
+            boxShadow: '0 1px 4px #0003',
+          }}
+          onClick={() => setCalendarOpen(true)}
+        >
+          Logs
+        </button>
+        {calendarOpen && (
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            background: '#000a',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+            onClick={() => setCalendarOpen(false)}
+          >
+            <div style={{ position: 'relative', background: cardBg, borderRadius: 16, padding: 24, minWidth: 360 }} onClick={e => e.stopPropagation()}>
+              <button onClick={() => setCalendarOpen(false)} style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: 'none', color: '#aaa', fontSize: 22, cursor: 'pointer' }}>&times;</button>
+              <MonthCalendar
+                year={calendarMonth.year}
+                month={calendarMonth.month}
+                selectedDate={selectedDate}
+                onSelect={date => {
+                  setSelectedDate(date);
+                  setCalendarOpen(false);
+                }}
+                onPrev={() => setCalendarMonth(m => {
+                  const prev = new Date(m.year, m.month - 1, 1);
+                  return { year: prev.getFullYear(), month: prev.getMonth() };
+                })}
+                onNext={() => setCalendarMonth(m => {
+                  const next = new Date(m.year, m.month + 1, 1);
+                  return { year: next.getFullYear(), month: next.getMonth() };
+                })}
+                entries={entries}
+                dailyLimit={dailyLimit}
+              />
+              <div style={{ marginTop: 18 }}>
+                <h4 style={{ color: accent, margin: 0, marginBottom: 8 }}>Entries for {selectedDate}</h4>
+                <ul style={{ padding: 0, listStyle: 'none' }}>
+                  {filteredEntries.length === 0 && <li style={{ color: '#aaa' }}>No entries</li>}
+                  {filteredEntries.map((e, i) => (
+                    <li key={i} style={{ marginBottom: 10, borderRadius: 8, background: cardBg, border: `1px solid ${border}`, padding: '10px 12px', boxShadow: '0 1px 4px #0002', display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontWeight: 500, fontSize: 16 }}>{e.name}</span>
+                      <span style={{ fontSize: 14, color: '#fbbf24' }}>{e.calories} kcal</span>
+                      <span style={{ fontSize: 13, color: '#aaa', marginTop: 2 }}>
+                        {e.protein && `Protein: ${e.protein}g`}
+                        {e.carbs && ` | Carbs: ${e.carbs}g`}
+                        {e.fat && ` | Fat: ${e.fat}g`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <h1 style={{ color: accent, letterSpacing: 1, fontWeight: 700, marginBottom: 0 }}>Caltrack</h1>
         </div>
@@ -344,9 +432,9 @@ function App() {
             Fat: <span style={{ color: '#f87171' }}>{total.fat}g</span>
           </div>
         </div>
-        <h3 style={{ color: accent, marginTop: 24, marginBottom: 12, fontWeight: 600 }}>Entries</h3>
+        <h3 style={{ color: accent, marginTop: 24, marginBottom: 12, fontWeight: 600 }}>Entries for {selectedDate}</h3>
         <ul style={{ padding: 0, listStyle: 'none' }}>
-          {entries.map((e, i) => (
+          {filteredEntries.map((e, i) => (
             <li
               key={i}
               style={{

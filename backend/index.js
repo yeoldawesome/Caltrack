@@ -77,7 +77,9 @@ app.get('/auth/user', async (req, res) => {
 // Allow anyone to save an entry (no auth)
 app.post('/api/entry', async (req, res) => {
   await db.read();
-  const entry = { ...req.body, date: new Date().toISOString() };
+  let entryDate = req.body.date;
+  if (!entryDate) entryDate = new Date().toISOString();
+  const entry = { ...req.body, date: entryDate };
   db.data.entries.push(entry);
   await db.write();
   res.json({ success: true });
