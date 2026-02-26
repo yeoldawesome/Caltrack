@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 
-const Settings = ({ onClose, settings, setSettings }) => {
+const Settings = ({ onClose, settings, setSettings, user, handleLogout }) => {
   const [localSettings, setLocalSettings] = useState(settings);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Fetch calorie limit from backend on mount
+  // Fetch calorie limit for logged-in user
   React.useEffect(() => {
-    fetch('http://localhost:4000/api/calorie-limit')
+    fetch('http://localhost:4000/api/calorie-limit', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         setLocalSettings({ dailyLimit: data.calorieLimit });
@@ -26,6 +26,7 @@ const Settings = ({ onClose, settings, setSettings }) => {
       const res = await fetch('http://localhost:4000/api/calorie-limit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ calorieLimit: localSettings.dailyLimit })
       });
       if (!res.ok) throw new Error('Failed to save');
@@ -42,6 +43,12 @@ const Settings = ({ onClose, settings, setSettings }) => {
       <div style={{ background: '#23272b', borderRadius: 16, padding: 24, minWidth: 320, position: 'relative' }}>
         <button onClick={onClose} style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: 'none', color: '#aaa', fontSize: 22, cursor: 'pointer' }}>&times;</button>
         <h3 style={{ color: '#4fd1c5', marginBottom: 12 }}>Settings</h3>
+        {user && (
+          <div style={{ marginBottom: 16, color: '#4fd1c5', fontWeight: 600, fontSize: 16 }}>
+            {user.email}
+            <button onClick={handleLogout} style={{ marginLeft: 12, background: 'none', border: 'none', color: '#ef4444', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>Logout</button>
+          </div>
+        )}
         <div style={{ marginBottom: 16 }}>
           <label style={{ color: '#f5f6fa', fontWeight: 500, marginRight: 8 }}>Daily Calorie Limit:</label>
           <input

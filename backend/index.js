@@ -11,7 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 // DB setup
-const db = new Low(new JSONFile(path.join(process.cwd(), 'db.json')), { users: [], entries: [] });
+const db = new Low(new JSONFile(path.join(process.cwd(), 'db.json')), { users: [], entries: [], favorites: [], calorieLimit: {}, });
 
 app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
 app.use(bodyParser.json());
@@ -72,17 +72,14 @@ app.get('/auth/user', async (req, res) => {
   res.json({ user: { id: user.id, email: user.email } });
 });
 
-// Save entry
-
-// Allow anyone to save an entry (no auth)
-app.post('/api/entry', async (req, res) => {
+// Save entry (per user)
+app.post('/api/entry', ensureAuth, async (req, res) => {
   await db.read();
   let entryDate = req.body.date;
   if (!entryDate) entryDate = new Date().toISOString();
-  // Assign a unique id
   let maxId = 0;
   db.data.entries.forEach(e => { if (e.id && Number(e.id) > maxId) maxId = Number(e.id); });
-  const entry = { ...req.body, date: entryDate, id: maxId + 1 };
+  const entry = { ...req.body, date: entryDate, id: maxId + 1, userId: req.session.userId };
   db.data.entries.push(entry);
   await db.write();
   res.json({ success: true, id: entry.id });
@@ -126,66 +123,68 @@ app.delete('/api/entry/:id', async (req, res) => {
   }
 });
 
-// Allow anyone to get all entries (no auth)
-app.get('/api/entries', async (req, res) => {
+// Get entries for current user
+app.get('/api/entries', ensureAuth, async (req, res) => {
   await db.read();
-  res.json(db.data.entries || []);
+  const userEntries = (db.data.entries || []).filter(e => e.userId === req.session.userId);
+  res.json(userEntries);
 });
 
-// Get recent entries (last N)
-app.get('/api/recent', async (req, res) => {
+// Get recent entries (last N) for user
+app.get('/api/recent', ensureAuth, async (req, res) => {
   await db.read();
   const limit = parseInt(req.query.limit || '10', 10);
-  const entries = (db.data.entries || []).slice().sort((a, b) => {
+  const entries = (db.data.entries || []).filter(e => e.userId === req.session.userId).slice().sort((a, b) => {
     return new Date(b.date) - new Date(a.date);
   }).slice(0, limit);
   res.json(entries);
 });
 
-// Favorites endpoints (simple saved meal templates)
-app.get('/api/favorites', async (req, res) => {
+// Favorites endpoints (per user)
+app.get('/api/favorites', ensureAuth, async (req, res) => {
   await db.read();
-  res.json(db.data.favorites || []);
+  const userFavs = (db.data.favorites || []).filter(f => f.userId === req.session.userId);
+  res.json(userFavs);
 });
 
-app.post('/api/favorites', async (req, res) => {
+app.post('/api/favorites', ensureAuth, async (req, res) => {
   await db.read();
   if (!db.data.favorites) db.data.favorites = [];
-  // assign id
   let maxId = 0;
   db.data.favorites.forEach(f => { if (f.id && Number(f.id) > maxId) maxId = Number(f.id); });
-  const fav = { ...req.body, id: maxId + 1 };
+  const fav = { ...req.body, id: maxId + 1, userId: req.session.userId };
   db.data.favorites.push(fav);
   await db.write();
   res.json({ success: true, id: fav.id });
 });
 
-app.delete('/api/favorites/:id', async (req, res) => {
+app.delete('/api/favorites/:id', ensureAuth, async (req, res) => {
   await db.read();
   const id = req.params.id;
   const before = (db.data.favorites || []).length;
-  db.data.favorites = (db.data.favorites || []).filter(f => String(f.id) !== String(id));
+  db.data.favorites = (db.data.favorites || []).filter(f => String(f.id) !== String(id) || f.userId !== req.session.userId);
   const after = db.data.favorites.length;
   await db.write();
   if (after < before) res.json({ success: true });
   else res.status(404).json({ error: 'Favorite not found' });
 });
 
-// Daily calorie limit endpoints
-app.get('/api/calorie-limit', async (req, res) => {
+// Daily calorie limit endpoints (per user)
+app.get('/api/calorie-limit', ensureAuth, async (req, res) => {
   await db.read();
-  res.json({ calorieLimit: db.data.calorieLimit || 2000 }); // Default 2000 if not set
+  const userLimit = db.data.calorieLimit[req.session.userId] || 2000;
+  res.json({ calorieLimit: userLimit });
 });
 
-app.post('/api/calorie-limit', async (req, res) => {
+app.post('/api/calorie-limit', ensureAuth, async (req, res) => {
   const { calorieLimit } = req.body;
   if (!calorieLimit || isNaN(calorieLimit)) {
     return res.status(400).json({ error: 'Invalid calorie limit' });
   }
   await db.read();
-  db.data.calorieLimit = Number(calorieLimit);
+  db.data.calorieLimit[req.session.userId] = Number(calorieLimit);
   await db.write();
-  res.json({ success: true, calorieLimit: db.data.calorieLimit });
+  res.json({ success: true, calorieLimit: db.data.calorieLimit[req.session.userId] });
 });
 
 app.listen(PORT, () => {
@@ -203,9 +202,17 @@ app.listen(PORT, () => {
       }
     });
     if (changed) await db.write();
-    // Ensure calorieLimit exists
+    // Ensure calorieLimit exists and is an object
     if (typeof db.data.calorieLimit === 'undefined') {
-      db.data.calorieLimit = 2000;
+      db.data.calorieLimit = {};
+      await db.write();
+    }
+    if (typeof db.data.calorieLimit === 'number') {
+      const oldLimit = db.data.calorieLimit;
+      db.data.calorieLimit = {};
+      (db.data.users || []).forEach(u => {
+        db.data.calorieLimit[u.id] = oldLimit;
+      });
       await db.write();
     }
     // Ensure favorites array exists

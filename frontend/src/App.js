@@ -14,6 +14,64 @@ const inputBorder = '#353b41';
 const placeholder = '#7b848b';
 
 function App() {
+  // User auth state
+  const [user, setUser] = useState(null);
+  const [authModal, setAuthModal] = useState(true);
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  // Check session on mount
+  useEffect(() => {
+    fetch('http://localhost:4000/auth/user', { credentials: 'include' })
+      .then(r => r.json())
+      .then(d => {
+        if (d && d.user) {
+          setUser(d.user);
+          setAuthModal(false);
+        } else {
+          setUser(null);
+          setAuthModal(true);
+        }
+      })
+      .catch(() => {
+        setUser(null);
+        setAuthModal(true);
+      });
+  }, []);
+
+  // Auth handlers
+  async function handleAuthSubmit(e) {
+    e.preventDefault();
+    setAuthError('');
+    const url = authMode === 'login' ? 'http://localhost:4000/auth/login' : 'http://localhost:4000/auth/signup';
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: authEmail, password: authPassword })
+      });
+      const data = await res.json();
+      if (res.ok && data.user) {
+        setUser(data.user);
+        setAuthModal(false);
+        setAuthEmail('');
+        setAuthPassword('');
+      } else {
+        setAuthError(data.error || 'Authentication failed');
+      }
+    } catch (err) {
+      setAuthError('Network error');
+    }
+  }
+
+  async function handleLogout() {
+    await fetch('http://localhost:4000/auth/logout', { method: 'POST', credentials: 'include' });
+    setUser(null);
+    setAuthModal(true);
+  }
   // Settings modal state
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState({ dailyLimit: 2000 });
@@ -29,9 +87,10 @@ function App() {
   // ref for hidden file input used by Upload Image button
   const inputRef = useRef(null);
 
-  // Load calorie limit from backend on mount
+  // Load calorie limit for logged-in user
   useEffect(() => {
-    fetch('http://localhost:4000/api/calorie-limit')
+    if (!user) return;
+    fetch('http://localhost:4000/api/calorie-limit', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         const limit = (data && (data.calorieLimit || data.dailyLimit)) || 2000;
@@ -41,7 +100,7 @@ function App() {
       .catch(() => {
         // keep default if fetch fails
       });
-  }, []);
+  }, [user]);
 
   // Entry state for editing
   const [editIndex, setEditIndex] = useState(null);
@@ -241,8 +300,9 @@ function App() {
 
 
   const [entries, setEntries] = useState([]);
-  // Fetch entries from backend on mount
+  // Fetch entries for logged-in user
   useEffect(() => {
+    if (!user) return;
     fetch('http://localhost:4000/api/entries', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
@@ -250,7 +310,7 @@ function App() {
         else setEntries([]);
       })
       .catch(() => setEntries([]));
-  }, []);
+  }, [user]);
 
   // Recent and favorites state
   const [recentOpen, setRecentOpen] = useState(false);
@@ -258,17 +318,18 @@ function App() {
   const [recentMeals, setRecentMeals] = useState([]);
   const [favorites, setFavorites] = useState([]);
 
-  // Fetch favorites on mount
+  // Fetch favorites for logged-in user
   useEffect(() => {
-    fetch('http://localhost:4000/api/favorites')
+    if (!user) return;
+    fetch('http://localhost:4000/api/favorites', { credentials: 'include' })
       .then(r => r.json())
       .then(d => Array.isArray(d) ? setFavorites(d) : setFavorites([]))
       .catch(() => setFavorites([]));
-  }, []);
+  }, [user]);
 
   async function fetchRecent(limit = 10) {
     try {
-      const res = await fetch(`http://localhost:4000/api/recent?limit=${limit}`);
+      const res = await fetch(`http://localhost:4000/api/recent?limit=${limit}`, { credentials: 'include' });
       const data = await res.json();
       setRecentMeals(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -279,10 +340,10 @@ function App() {
   async function addFavoriteFromEntry(entryObj) {
     try {
       await fetch('http://localhost:4000/api/favorites', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ name: entryObj.name, calories: entryObj.calories, protein: entryObj.protein, carbs: entryObj.carbs, fat: entryObj.fat })
       });
-      const res = await fetch('http://localhost:4000/api/favorites');
+      const res = await fetch('http://localhost:4000/api/favorites', { credentials: 'include' });
       const data = await res.json();
       setFavorites(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -294,11 +355,11 @@ function App() {
     try {
       const newEntry = { ...template, date: selectedDate };
       const res = await fetch('http://localhost:4000/api/entry', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newEntry)
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(newEntry)
       });
       if (res.ok) {
         // refresh entries
-        const entriesRes = await fetch('http://localhost:4000/api/entries');
+        const entriesRes = await fetch('http://localhost:4000/api/entries', { credentials: 'include' });
         const data = await entriesRes.json();
         if (Array.isArray(data)) setEntries(data);
       }
@@ -309,8 +370,8 @@ function App() {
 
   async function removeFavorite(id) {
     try {
-      await fetch(`http://localhost:4000/api/favorites/${id}`, { method: 'DELETE' });
-      const res = await fetch('http://localhost:4000/api/favorites');
+      await fetch(`http://localhost:4000/api/favorites/${id}`, { method: 'DELETE', credentials: 'include' });
+      const res = await fetch('http://localhost:4000/api/favorites', { credentials: 'include' });
       const data = await res.json();
       setFavorites(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -432,6 +493,44 @@ function App() {
     }
   };
 
+  // Show login/signup modal if not authenticated
+  if (authModal) {
+    return (
+      <div style={{ minHeight: '100vh', background: darkBg, color: textColor, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ background: cardBg, borderRadius: 16, padding: 32, minWidth: 320, boxShadow: '0 2px 8px #0003' }}>
+          <h2 style={{ color: accent, marginBottom: 16 }}>{authMode === 'login' ? 'Log In' : 'Sign Up'}</h2>
+          <form onSubmit={handleAuthSubmit}>
+            <input
+              type="email"
+              placeholder="Email"
+              value={authEmail}
+              onChange={e => setAuthEmail(e.target.value)}
+              style={{ width: '100%', marginBottom: 12, padding: '8px 12px', borderRadius: 6, border: `1px solid ${inputBorder}`, background: inputBg, color: textColor, fontSize: 16 }}
+              required
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={authPassword}
+              onChange={e => setAuthPassword(e.target.value)}
+              style={{ width: '100%', marginBottom: 12, padding: '8px 12px', borderRadius: 6, border: `1px solid ${inputBorder}`, background: inputBg, color: textColor, fontSize: 16 }}
+              required
+            />
+            {authError && <div style={{ color: '#ef4444', marginBottom: 8 }}>{authError}</div>}
+            <button type="submit" style={{ width: '100%', background: accent, color: darkBg, border: 'none', borderRadius: 6, padding: '10px 0', fontWeight: 600, fontSize: 18, marginBottom: 8, cursor: 'pointer' }}>{authMode === 'login' ? 'Log In' : 'Sign Up'}</button>
+          </form>
+          <div style={{ textAlign: 'center', marginTop: 8 }}>
+            {authMode === 'login' ? (
+              <span style={{ color: '#aaa' }}>Don't have an account? <button style={{ background: 'none', border: 'none', color: accent, cursor: 'pointer', fontWeight: 600 }} onClick={() => { setAuthMode('signup'); setAuthError(''); }}>Sign Up</button></span>
+            ) : (
+              <span style={{ color: '#aaa' }}>Already have an account? <button style={{ background: 'none', border: 'none', color: accent, cursor: 'pointer', fontWeight: 600 }} onClick={() => { setAuthMode('login'); setAuthError(''); }}>Log In</button></span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Always show tracker UI
   return (
     <div
@@ -453,12 +552,21 @@ function App() {
       >
         <span role="img" aria-label="settings">&#9881;</span>
       </button>
+      {/* User info and logout */}
+      {user && (
+        <div style={{ position: 'absolute', top: 16, left: 16, color: accent, fontWeight: 600, fontSize: 16 }}>
+          {user.email}
+          <button onClick={handleLogout} style={{ marginLeft: 12, background: 'none', border: 'none', color: '#ef4444', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>Logout</button>
+        </div>
+      )}
       {/* Settings modal */}
       {settingsOpen && (
         <Settings
           onClose={() => setSettingsOpen(false)}
           settings={settings}
           setSettings={updateSettings}
+          user={user}
+          handleLogout={handleLogout}
         />
       )}
       <div
