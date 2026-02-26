@@ -552,13 +552,7 @@ function App() {
       >
         <span role="img" aria-label="settings">&#9881;</span>
       </button>
-      {/* User info and logout */}
-      {user && (
-        <div style={{ position: 'absolute', top: 16, left: 16, color: accent, fontWeight: 600, fontSize: 16 }}>
-          {user.email}
-          <button onClick={handleLogout} style={{ marginLeft: 12, background: 'none', border: 'none', color: '#ef4444', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>Logout</button>
-        </div>
-      )}
+      {/* User info and logout moved to Settings modal */}
       {/* Settings modal */}
       {settingsOpen && (
         <Settings
