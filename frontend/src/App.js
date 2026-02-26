@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import MonthCalendar from './MonthCalendar';
+import BarcodeScanner from './BarcodeScanner';
 import Tesseract from 'tesseract.js';
 
 const darkBg = '#181c20';
@@ -13,6 +14,27 @@ const inputBorder = '#353b41';
 const placeholder = '#7b848b';
 
 function App() {
+    // Nutrition options modal state
+    const [nutritionOptions, setNutritionOptions] = useState(null);
+    const [servingsInput, setServingsInput] = useState(1);
+
+    function roundVal(val) {
+      return val === '' || val === undefined ? '' : Math.round(Number(val) * 100) / 100;
+    }
+
+    function handleSelectNutritionOption(option) {
+      const servings = parseFloat(servingsInput) || 1;
+      setEntry(e => ({
+        ...e,
+        name: nutritionOptions.name,
+        calories: roundVal(option.calories * servings),
+        protein: roundVal(option.protein * servings),
+        carbs: roundVal(option.carbs * servings),
+        fat: roundVal(option.fat * servings),
+      }));
+      setNutritionOptions(null);
+      setServingsInput(1);
+    }
   // Calendar state
   const todayStr = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(todayStr);
@@ -22,6 +44,8 @@ function App() {
     return { year: d.getFullYear(), month: d.getMonth() };
   });
   const [ocrLoading, setOcrLoading] = useState(false);
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
+  const [barcodeError, setBarcodeError] = useState('');
   const [ocrError, setOcrError] = useState('');
   const [ocrText, setOcrText] = useState('');
 
@@ -176,7 +200,146 @@ function App() {
           padding: 24,
         }}
       >
-        {/* Logs button and calendar modal */}
+        {/* Barcode scan button and modal */}
+        <button
+          style={{
+            background: accent,
+            color: darkBg,
+            border: 'none',
+            borderRadius: 6,
+            padding: '8px 18px',
+            fontWeight: 600,
+            fontSize: 16,
+            marginBottom: 16,
+            marginRight: 8,
+            cursor: 'pointer',
+            boxShadow: '0 1px 4px #0003',
+          }}
+          onClick={() => setBarcodeOpen(true)}
+        >
+          Scan Barcode
+        </button>
+        {barcodeOpen && (
+          <BarcodeScanner
+            onDetected={async (barcode) => {
+              setBarcodeOpen(false);
+              setBarcodeError('');
+              try {
+                const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+                const data = await res.json();
+                if (data.status === 1 && data.product) {
+                  const p = data.product;
+                  const n = p.nutriments || {};
+                  const servingSize = n['serving_size'] || p.serving_size || '';
+                  // Parse serving size in grams if possible
+                  let servingGrams = null;
+                  if (servingSize) {
+                    const match = servingSize.match(/([0-9.]+)\s*g/);
+                    if (match) servingGrams = parseFloat(match[1]);
+                  }
+                  // Per 100g values
+                  const per100g = {
+                    calories: parseFloat(n['energy-kcal_100g']) || 0,
+                    protein: parseFloat(n['protein_100g'] || n['proteins_100g']) || 0,
+                    carbs: parseFloat(n['carbohydrates_100g'] || n['carbs_100g']) || 0,
+                    fat: parseFloat(n['fat_100g']) || 0,
+                  };
+                  // Per serving values (may be missing or wrong)
+                  let perServing = {
+                    calories: parseFloat(n['energy-kcal_serving']) || '',
+                    protein: '',
+                    carbs: '',
+                    fat: '',
+                  };
+                  // Combine: calories from perServing, macros from per100g (not scaled)
+                  perServing.protein = per100g.protein;
+                  perServing.carbs = per100g.carbs;
+                  perServing.fat = per100g.fat;
+                  // Gather all options
+                  const options = [];
+                  if (perServing.calories || perServing.protein || perServing.carbs || perServing.fat) {
+                    options.push({
+                      label: 'Per Serving',
+                      calories: perServing.calories,
+                      protein: perServing.protein,
+                      carbs: perServing.carbs,
+                      fat: perServing.fat,
+                      servingSize: servingSize || ''
+                    });
+                  }
+                  if (per100g.calories || per100g.protein || per100g.carbs || per100g.fat) {
+                    options.push({
+                      label: 'Per 100g',
+                      calories: per100g.calories,
+                      protein: per100g.protein,
+                      carbs: per100g.carbs,
+                      fat: per100g.fat,
+                      servingSize: '100g'
+                    });
+                  }
+                  // Always allow custom
+                  options.push({
+                    label: 'Custom',
+                    calories: '', protein: '', carbs: '', fat: '', servingSize: ''
+                  });
+                  setNutritionOptions({
+                    name: p.product_name || '',
+                    options,
+                    servingSize: servingSize || ''
+                  });
+                } else {
+                  setBarcodeError('No nutrition info found for this barcode.');
+                }
+              } catch {
+                setBarcodeError('Failed to fetch nutrition info.');
+              }
+            }}
+            onClose={() => setBarcodeOpen(false)}
+          />
+        )}
+
+
+        {/* Nutrition options modal */}
+        {nutritionOptions && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: '#000a', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <div style={{ background: cardBg, borderRadius: 16, padding: 24, minWidth: 320, position: 'relative' }}>
+              <button onClick={() => setNutritionOptions(null)} style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: 'none', color: '#aaa', fontSize: 22, cursor: 'pointer' }}>&times;</button>
+              <h3 style={{ color: accent, marginBottom: 12 }}>Choose Nutrition Values</h3>
+              <div style={{ marginBottom: 16, color: textColor, fontWeight: 500 }}>{nutritionOptions.name}</div>
+              {nutritionOptions.servingSize && <div style={{ color: '#aaa', marginBottom: 8 }}>Serving size: {nutritionOptions.servingSize}</div>}
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ color: textColor, fontWeight: 500, marginRight: 8 }}>Servings:</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={servingsInput}
+                  onChange={e => setServingsInput(e.target.value)}
+                  style={{ width: 60, background: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: 6, padding: '4px 8px' }}
+                />
+              </div>
+              {nutritionOptions.options.map((opt, i) => (
+                <button key={i} onClick={() => handleSelectNutritionOption(opt)} style={{
+                  display: 'block', width: '100%', marginBottom: 10, padding: 12, borderRadius: 8,
+                  background: '#23272b', color: textColor, border: `1px solid ${border}`, fontWeight: 500, fontSize: 16, cursor: 'pointer'
+                }}>
+                  {opt.label}<br />
+                  <span style={{ fontSize: 14, color: '#aaa' }}>
+                    {opt.calories !== '' && `Calories: ${opt.calories} kcal`}<br />
+                    {opt.protein !== '' && `Protein: ${opt.protein}g`}<br />
+                    {opt.carbs !== '' && `Carbs: ${opt.carbs}g`}<br />
+                    {opt.fat !== '' && `Fat: ${opt.fat}g`}
+                  </span>
+                  {opt.servingSize && <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>({opt.servingSize})</div>}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {barcodeError && <div style={{ color: '#ef4444', marginBottom: 8 }}>{barcodeError}</div>}
         <button
           style={{
             background: accent,
