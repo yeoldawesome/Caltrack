@@ -73,19 +73,22 @@ app.get('/auth/user', async (req, res) => {
 });
 
 // Save entry
-app.post('/api/entry', ensureAuth, async (req, res) => {
+
+// Allow anyone to save an entry (no auth)
+app.post('/api/entry', async (req, res) => {
   await db.read();
-  const entry = { ...req.body, userId: req.session.userId, date: new Date().toISOString() };
+  const entry = { ...req.body, date: new Date().toISOString() };
   db.data.entries.push(entry);
   await db.write();
   res.json({ success: true });
 });
 
 // Get entries
-app.get('/api/entries', ensureAuth, async (req, res) => {
+
+// Allow anyone to get all entries (no auth)
+app.get('/api/entries', async (req, res) => {
   await db.read();
-  const entries = db.data.entries.filter(e => e.userId === req.session.userId);
-  res.json(entries);
+  res.json(db.data.entries);
 });
 
 app.listen(PORT, () => {

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Tesseract from 'tesseract.js';
 
 const darkBg = '#181c20';
@@ -79,12 +79,7 @@ function App() {
     }
     setOcrLoading(false);
   };
-    const handleAdd = (e) => {
-      e.preventDefault();
-      if (!entry.name || !entry.calories) return;
-      setEntries([...entries, entry]);
-      setEntry({ name: '', calories: '', protein: '', carbs: '', fat: '' });
-    };
+    // (removed duplicate handleAdd)
   // Login/signup removed
   const [dailyLimit, setDailyLimit] = useState(2000);
   const [entry, setEntry] = useState({
@@ -94,8 +89,42 @@ function App() {
     carbs: '',
     fat: ''
   });
+
+
   const [entries, setEntries] = useState([]);
-  // OCR and file upload removed
+  // Fetch entries from backend on mount
+  useEffect(() => {
+    fetch('http://localhost:4000/api/entries', { credentials: 'include' })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setEntries(data);
+        else setEntries([]);
+      })
+      .catch(() => setEntries([]));
+  }, []);
+
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    if (!entry.name || !entry.calories) return;
+    // Save to backend
+    try {
+      const res = await fetch('http://localhost:4000/api/entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(entry),
+      });
+      if (res.ok) {
+        // Refetch entries after save
+        const entriesRes = await fetch('http://localhost:4000/api/entries', { credentials: 'include' });
+        const data = await entriesRes.json();
+        setEntries(data);
+        setEntry({ name: '', calories: '', protein: '', carbs: '', fat: '' });
+      }
+    } catch (err) {
+      // Optionally show error
+    }
+  };
 
   const total = entries.reduce(
     (acc, e) => ({
