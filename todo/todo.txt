@@ -1,6 +1,7 @@
 fix calander date thingy
-barcode 
+barcode DONE
 delete or modify entered items
 login stuff
 image upload serving options
 cal limit per week thingy
+better cal input

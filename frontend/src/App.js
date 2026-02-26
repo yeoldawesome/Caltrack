@@ -14,6 +14,57 @@ const inputBorder = '#353b41';
 const placeholder = '#7b848b';
 
 function App() {
+      // ...existing code...
+      // Entry state for editing
+      const [editIndex, setEditIndex] = useState(null);
+
+      // Edit handler: populate entry form with selected entry
+      function handleEditEntry(idx) {
+        setEditIndex(idx);
+        setEntry({ ...filteredEntries[idx] });
+      }
+
+      // Delete handler: always try to remove entry from backend if it has an id
+      async function handleDeleteEntry(idx) {
+        const entryToDelete = filteredEntries[idx];
+        if (entryToDelete.id) {
+          await fetch(`http://localhost:4000/api/entry/${entryToDelete.id}`, { method: 'DELETE', credentials: 'include' });
+          // Refetch entries
+          const entriesRes = await fetch('http://localhost:4000/api/entries', { credentials: 'include' });
+          const data = await entriesRes.json();
+          setEntries(data);
+        } else {
+          // If no id, just remove locally
+          setEntries(entries => entries.filter(e => e !== entryToDelete));
+        }
+      }
+
+      // Save handler: update entry if editing, otherwise add new
+      async function handleSaveEntry() {
+        if (editIndex !== null) {
+          // Update entry in backend if it has an id
+          const entryToUpdate = filteredEntries[editIndex];
+          if (entryToUpdate.id) {
+            await fetch(`http://localhost:4000/api/entry/${entryToUpdate.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify(entry)
+            });
+            // Refetch entries
+            const entriesRes = await fetch('http://localhost:4000/api/entries', { credentials: 'include' });
+            const data = await entriesRes.json();
+            setEntries(data);
+          } else {
+            // Update locally if no id
+            setEntries(entries => entries.map(e => e === entryToUpdate ? entry : e));
+          }
+          setEditIndex(null);
+          setEntry({ name: '', calories: '', protein: '', carbs: '', fat: '' });
+        } else {
+          // ...existing save logic...
+        }
+      }
     // Nutrition options modal state
     const [nutritionOptions, setNutritionOptions] = useState(null);
     const [servingsInput, setServingsInput] = useState(1);
@@ -177,8 +228,16 @@ function App() {
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
 
+  // Only allow numbers for numeric fields in entry editing
   const handleChange = (e) => {
-    setEntry({ ...entry, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (["calories", "protein", "carbs", "fat"].includes(name)) {
+      if (value === "" || /^\d*\.?\d*$/.test(value)) {
+        setEntry({ ...entry, [name]: value });
+      }
+    } else {
+      setEntry({ ...entry, [name]: value });
+    }
   };
 
   // Always show tracker UI
@@ -593,15 +652,70 @@ function App() {
                 boxShadow: '0 1px 4px #0002',
                 display: 'flex',
                 flexDirection: 'column',
+                position: 'relative',
               }}
             >
-              <span style={{ fontWeight: 500, fontSize: 16 }}>{e.name}</span>
-              <span style={{ fontSize: 14, color: '#fbbf24' }}>{e.calories} kcal</span>
-              <span style={{ fontSize: 13, color: '#aaa', marginTop: 2 }}>
-                {e.protein && `Protein: ${e.protein}g`}
-                {e.carbs && ` | Carbs: ${e.carbs}g`}
-                {e.fat && ` | Fat: ${e.fat}g`}
-              </span>
+              {editIndex === i ? (
+                <>
+                  <input
+                    style={{ fontWeight: 500, fontSize: 16, marginBottom: 4, background: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: 4, padding: '2px 8px' }}
+                    value={entry.name}
+                    name="name"
+                    onChange={handleChange}
+                  />
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                    <input
+                      style={{ width: 70, background: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: 4, padding: '2px 8px' }}
+                      value={entry.calories}
+                      name="calories"
+                      onChange={handleChange}
+                    />
+                    <span style={{ color: '#fbbf24' }}>kcal</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: '#aaa', marginTop: 2, marginBottom: 4 }}>
+                    <span>Protein:</span>
+                    <input
+                      style={{ width: 50, background: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: 4, padding: '2px 8px' }}
+                      value={entry.protein}
+                      name="protein"
+                      onChange={handleChange}
+                    />
+                    <span>g | Carbs:</span>
+                    <input
+                      style={{ width: 50, background: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: 4, padding: '2px 8px' }}
+                      value={entry.carbs}
+                      name="carbs"
+                      onChange={handleChange}
+                    />
+                    <span>g | Fat:</span>
+                    <input
+                      style={{ width: 50, background: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: 4, padding: '2px 8px' }}
+                      value={entry.fat}
+                      name="fat"
+                      onChange={handleChange}
+                    />
+                    <span>g</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                    <button onClick={handleSaveEntry} style={{ background: accent, color: '#fff', border: 'none', borderRadius: 4, padding: '2px 12px', cursor: 'pointer', fontSize: 13 }}>Save</button>
+                    <button onClick={() => { setEditIndex(null); setEntry({ name: '', calories: '', protein: '', carbs: '', fat: '' }); }} style={{ background: '#aaa', color: '#222', border: 'none', borderRadius: 4, padding: '2px 12px', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span style={{ fontWeight: 500, fontSize: 16 }}>{e.name}</span>
+                  <span style={{ fontSize: 14, color: '#fbbf24' }}>{e.calories} kcal</span>
+                  <span style={{ fontSize: 13, color: '#aaa', marginTop: 2 }}>
+                    {e.protein && `Protein: ${e.protein}g`}
+                    {e.carbs && ` | Carbs: ${e.carbs}g`}
+                    {e.fat && ` | Fat: ${e.fat}g`}
+                  </span>
+                  <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 8 }}>
+                    <button onClick={() => handleEditEntry(i)} style={{ background: accent, color: '#fff', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 13 }}>Edit</button>
+                    <button onClick={() => handleDeleteEntry(i)} style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 13 }}>Delete</button>
+                  </div>
+                </>
+              )}
             </li>
           ))}
         </ul>

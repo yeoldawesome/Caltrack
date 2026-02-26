@@ -1,17 +1,17 @@
-const express = require('express');
-const cors = require('cors');
-const bodyParser = require('body-parser');
-const session = require('express-session');
-const { Low } = require('lowdb');
-const { JSONFile } = require('lowdb/node');
-const path = require('path');
-const bcrypt = require('bcrypt');
+import express from 'express';
+import cors from 'cors';
+import bodyParser from 'body-parser';
+import session from 'express-session';
+import { Low } from 'lowdb';
+import { JSONFile } from 'lowdb/node';
+import path from 'path';
+import bcrypt from 'bcrypt';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
 // DB setup
-const db = new Low(new JSONFile(path.join(__dirname, 'db.json')), { users: [], entries: [] });
+const db = new Low(new JSONFile(path.join(process.cwd(), 'db.json')), { users: [], entries: [] });
 
 app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
 app.use(bodyParser.json());
@@ -79,13 +79,52 @@ app.post('/api/entry', async (req, res) => {
   await db.read();
   let entryDate = req.body.date;
   if (!entryDate) entryDate = new Date().toISOString();
-  const entry = { ...req.body, date: entryDate };
+  // Assign a unique id
+  let maxId = 0;
+  db.data.entries.forEach(e => { if (e.id && Number(e.id) > maxId) maxId = Number(e.id); });
+  const entry = { ...req.body, date: entryDate, id: maxId + 1 };
   db.data.entries.push(entry);
   await db.write();
-  res.json({ success: true });
+  res.json({ success: true, id: entry.id });
 });
 
 // Get entries
+
+// Delete entry by id
+// Update entry by id
+app.put('/api/entry/:id', async (req, res) => {
+  await db.read();
+  const id = req.params.id;
+  console.log('PUT /api/entry/:id called with id:', id);
+  console.log('All entry ids:', db.data.entries.map(e => e.id));
+  let found = false;
+  db.data.entries = db.data.entries.map(e => {
+    if (String(e.id) === String(id)) {
+      found = true;
+      return { ...e, ...req.body, id: e.id };
+    }
+    return e;
+  });
+  await db.write();
+  if (found) {
+    res.json({ success: true });
+  } else {
+    res.status(404).json({ error: 'Entry not found' });
+  }
+});
+app.delete('/api/entry/:id', async (req, res) => {
+  await db.read();
+  const id = req.params.id;
+  const before = db.data.entries.length;
+  db.data.entries = db.data.entries.filter(e => String(e.id) !== String(id));
+  const after = db.data.entries.length;
+  await db.write();
+  if (after < before) {
+    res.json({ success: true });
+  } else {
+    res.status(404).json({ error: 'Entry not found' });
+  }
+});
 
 // Allow anyone to get all entries (no auth)
 app.get('/api/entries', async (req, res) => {
@@ -94,5 +133,20 @@ app.get('/api/entries', async (req, res) => {
 });
 
 app.listen(PORT, () => {
+  // Migration: assign IDs to entries without one
+  (async () => {
+    await db.read();
+    let maxId = 0;
+    db.data.entries.forEach(e => { if (e.id && Number(e.id) > maxId) maxId = Number(e.id); });
+    let changed = false;
+    db.data.entries.forEach(e => {
+      if (!e.id) {
+        maxId++;
+        e.id = maxId;
+        changed = true;
+      }
+    });
+    if (changed) await db.write();
+  })();
   console.log(`Server running on port ${PORT}`);
 });
