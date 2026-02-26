@@ -227,23 +227,7 @@ function App() {
                 entries={entries}
                 dailyLimit={dailyLimit}
               />
-              <div style={{ marginTop: 18 }}>
-                <h4 style={{ color: accent, margin: 0, marginBottom: 8 }}>Entries for {selectedDate}</h4>
-                <ul style={{ padding: 0, listStyle: 'none' }}>
-                  {filteredEntries.length === 0 && <li style={{ color: '#aaa' }}>No entries</li>}
-                  {filteredEntries.map((e, i) => (
-                    <li key={i} style={{ marginBottom: 10, borderRadius: 8, background: cardBg, border: `1px solid ${border}`, padding: '10px 12px', boxShadow: '0 1px 4px #0002', display: 'flex', flexDirection: 'column' }}>
-                      <span style={{ fontWeight: 500, fontSize: 16 }}>{e.name}</span>
-                      <span style={{ fontSize: 14, color: '#fbbf24' }}>{e.calories} kcal</span>
-                      <span style={{ fontSize: 13, color: '#aaa', marginTop: 2 }}>
-                        {e.protein && `Protein: ${e.protein}g`}
-                        {e.carbs && ` | Carbs: ${e.carbs}g`}
-                        {e.fat && ` | Fat: ${e.fat}g`}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {/* Removed entries list from calendar modal for cleaner UI */}
             </div>
           </div>
         )}
