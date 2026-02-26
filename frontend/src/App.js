@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import MonthCalendar from './MonthCalendar';
 import BarcodeScanner from './BarcodeScanner';
 import Tesseract from 'tesseract.js';
@@ -25,6 +25,9 @@ function App() {
     setSettings(merged);
     setDailyLimit(parsedLimit);
   };
+
+  // ref for hidden file input used by Upload Image button
+  const inputRef = useRef(null);
 
   // Load calorie limit from backend on mount
   useEffect(() => {
@@ -173,9 +176,15 @@ function App() {
     if (!entry || !entry.name) return;
     const newEntry = {
       ...entry,
-      date: new Date(selectedDate).toISOString()
+      // keep date as YYYY-MM-DD so optimistic entry matches filtered date
+      date: selectedDate
     };
-    // Try to save to backend, fallback to local-only
+    // optimistic UI: add a temp entry immediately so the user sees it
+    const tempId = `temp-${Date.now()}`;
+    const tempEntry = { ...newEntry, tempId };
+    setEntries(prev => [tempEntry, ...prev]);
+
+    // Try to save to backend, replace temp entry with saved response when available
     try {
       const res = await fetch('http://localhost:4000/api/entry', {
         method: 'POST',
@@ -185,14 +194,23 @@ function App() {
       });
       if (res.ok) {
         const saved = await res.json();
-        setEntries(prev => [saved, ...prev]);
+        // Replace temp entry locally
+        setEntries(prev => prev.map(e => e.tempId === tempId ? saved : e));
+        // Then refresh full list from backend to ensure UI matches DB
+        try {
+          const entriesRes = await fetch('http://localhost:4000/api/entries', { credentials: 'include' });
+          const data = await entriesRes.json();
+          if (Array.isArray(data)) setEntries(data);
+        } catch (err) {
+          // ignore refresh error
+        }
       } else {
-        // fallback local
-        setEntries(prev => [newEntry, ...prev]);
+        // leave temp entry as-is if server rejected
       }
     } catch (err) {
-      setEntries(prev => [newEntry, ...prev]);
+      // network error: leave temp entry and optionally show error later
     }
+
     setEntry({ name: '', calories: '', protein: '', carbs: '', fat: '' });
   };
 
@@ -528,15 +546,52 @@ function App() {
             <span style={{ marginLeft: 8, color: textColor, fontWeight: 600 }}>{dailyLimit}</span>
           </label>
         </div>
-        {/* Image upload for nutrition label */}
-        <div 
+        {/* Upload */}
+        <div
           style={{ background: cardBg, borderRadius: 12, padding: 16, marginBottom: 16, border: `1px solid ${border}` }}
           tabIndex={0}
           onPaste={handlePaste}
         >
-          <label style={{ fontWeight: 500, marginBottom: 8, display: 'block' }}>Upload or Paste Nutrition Label Image:</label>
-          <input type="file" accept="image/*" onChange={handleImageUpload} style={{ color: textColor, marginBottom: 8 }} />
-          <div style={{ fontSize: 13, color: '#aaa', marginBottom: 4 }}>
+          <label style={{ fontWeight: 600, marginBottom: 8, display: 'block', color: textColor }}>Upload</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={() => setBarcodeOpen(true)}
+              style={{
+                background: accent,
+                color: darkBg,
+                border: 'none',
+                borderRadius: 6,
+                padding: '8px 18px',
+                fontWeight: 600,
+                fontSize: 16,
+                cursor: 'pointer',
+                boxShadow: '0 1px 4px #0003',
+              }}
+            >
+              Scan Barcode
+            </button>
+
+            <button
+              type="button"
+              onClick={() => inputRef.current && inputRef.current.click()}
+              style={{
+                background: accent,
+                color: darkBg,
+                border: 'none',
+                borderRadius: 6,
+                padding: '8px 18px',
+                fontWeight: 600,
+                fontSize: 16,
+                cursor: 'pointer',
+                boxShadow: '0 1px 4px #0003',
+              }}
+            >
+              Upload Image
+            </button>
+            <input ref={inputRef} type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
+          </div>
+          <div style={{ fontSize: 13, color: '#aaa', marginTop: 8 }}>
             Or paste an image here (Ctrl+V)
           </div>
           {ocrLoading && <div style={{ color: accent, marginTop: 8 }}>Reading nutrition label...</div>}
