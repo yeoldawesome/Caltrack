@@ -286,6 +286,57 @@ function App() {
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
 
+  // Compute macro calories and unknown calories
+  const macroKcal = {
+    protein: total.protein * 4,
+    carbs: total.carbs * 4,
+    fat: total.fat * 9,
+  };
+  const sumMacroKcal = macroKcal.protein + macroKcal.carbs + macroKcal.fat;
+  let unknownKcal = Number(total.calories) - sumMacroKcal;
+  if (isNaN(unknownKcal) || unknownKcal < 0) unknownKcal = 0;
+
+  // Simple SVG PieChart component
+  function PieChart({ segments, size = 140 }) {
+    const radius = size / 2;
+    const viewBox = `0 0 ${size} ${size}`;
+    const cx = radius;
+    const cy = radius;
+
+    const totalVal = segments.reduce((s, seg) => s + seg.value, 0);
+    if (totalVal === 0) {
+      return (
+        <svg width={size} height={size} viewBox={viewBox}>
+          <circle cx={cx} cy={cy} r={radius - 2} fill="#111" stroke="#2d3237" strokeWidth="2" />
+          <text x={cx} y={cy} fill="#aaa" fontSize={12} textAnchor="middle" dy="4">No data</text>
+        </svg>
+      );
+    }
+
+    let startAngle = -90; // start at top
+    const paths = segments.map((seg, i) => {
+      const angle = (seg.value / totalVal) * 360;
+      const endAngle = startAngle + angle;
+      const largeArc = angle > 180 ? 1 : 0;
+      const start = polarToCartesian(cx, cy, radius - 2, endAngle);
+      const end = polarToCartesian(cx, cy, radius - 2, startAngle);
+      const d = `M ${cx} ${cy} L ${start.x} ${start.y} A ${radius - 2} ${radius - 2} 0 ${largeArc} 0 ${end.x} ${end.y} Z`;
+      startAngle = endAngle;
+      return <path key={i} d={d} fill={seg.color} />;
+    });
+
+    return (
+      <svg width={size} height={size} viewBox={viewBox}>
+        {paths}
+      </svg>
+    );
+  }
+
+  function polarToCartesian(cx, cy, r, angleDeg) {
+    const angleRad = (angleDeg - 90) * Math.PI / 180.0;
+    return { x: cx + (r * Math.cos(angleRad)), y: cy + (r * Math.sin(angleRad)) };
+  }
+
   // Only allow numbers for numeric fields in entry editing
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -334,25 +385,7 @@ function App() {
           padding: 24,
         }}
       >
-        {/* Barcode scan button and modal */}
-        <button
-          style={{
-            background: accent,
-            color: darkBg,
-            border: 'none',
-            borderRadius: 6,
-            padding: '8px 18px',
-            fontWeight: 600,
-            fontSize: 16,
-            marginBottom: 16,
-            marginRight: 8,
-            cursor: 'pointer',
-            boxShadow: '0 1px 4px #0003',
-          }}
-          onClick={() => setBarcodeOpen(true)}
-        >
-          Scan Barcode
-        </button>
+        {/* Barcode modal trigger moved to Upload box; top button removed */}
         {barcodeOpen && (
           <BarcodeScanner
             onDetected={async (barcode) => {
@@ -489,7 +522,7 @@ function App() {
           }}
           onClick={() => setCalendarOpen(true)}
         >
-          Logs
+          Calander
         </button>
         {calendarOpen && (
           <div style={{
@@ -529,7 +562,7 @@ function App() {
           </div>
         )}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <h1 style={{ color: accent, letterSpacing: 1, fontWeight: 700, marginBottom: 0 }}>Caltrack</h1>
+          <h1 style={{ color: accent, letterSpacing: 1, fontWeight: 700, marginBottom: 0 }}>CalTrack</h1>
         </div>
         <div
           style={{
@@ -671,22 +704,39 @@ function App() {
           style={{
             background: cardBg,
             borderRadius: 12,
-            padding: 16,
+            padding: 12,
             marginBottom: 20,
             border: `1px solid ${border}`,
             boxShadow: '0 2px 8px #0002',
+            display: 'flex',
+            gap: 12,
+            alignItems: 'center'
           }}
         >
-          <div style={{ fontWeight: 600, fontSize: 18, color: accent }}>
-            Calories left: {dailyLimit - total.calories}
+          <div style={{ width: 140, flex: '0 0 140px' }}>
+            <PieChart
+              segments={[
+                { label: 'Protein', value: macroKcal.protein, color: '#63e6be' },
+                { label: 'Carbs', value: macroKcal.carbs, color: '#60a5fa' },
+                { label: 'Fat', value: macroKcal.fat, color: '#f87171' },
+                { label: 'Unknown', value: unknownKcal, color: '#9ca3af' },
+              ]}
+              size={140}
+            />
           </div>
-          <div style={{ marginTop: 6, fontSize: 15 }}>
-            Consumed: <span style={{ color: '#fbbf24' }}>{total.calories} kcal</span>
-          </div>
-          <div style={{ marginTop: 4, fontSize: 15 }}>
-            Protein: <span style={{ color: '#63e6be' }}>{total.protein}g</span> |
-            Carbs: <span style={{ color: '#60a5fa' }}>{total.carbs}g</span> |
-            Fat: <span style={{ color: '#f87171' }}>{total.fat}g</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 600, fontSize: 18, color: accent }}>
+              Calories left: {dailyLimit - total.calories}
+            </div>
+            <div style={{ marginTop: 6, fontSize: 15 }}>
+              Consumed: <span style={{ color: '#fbbf24' }}>{total.calories} kcal</span>
+            </div>
+            <div style={{ marginTop: 8, display: 'flex', gap: 12, alignItems: 'center', fontSize: 14 }}>
+              <div style={{ color: '#63e6be' }}>Protein: <strong style={{ color: textColor }}>{total.protein}g</strong> (<strong style={{ color: textColor }}>{Math.round(macroKcal.protein)} kcal</strong>)</div>
+              <div style={{ color: '#60a5fa' }}>Carbs: <strong style={{ color: textColor }}>{total.carbs}g</strong> (<strong style={{ color: textColor }}>{Math.round(macroKcal.carbs)} kcal</strong>)</div>
+              <div style={{ color: '#f87171' }}>Fat: <strong style={{ color: textColor }}>{total.fat}g</strong> (<strong style={{ color: textColor }}>{Math.round(macroKcal.fat)} kcal</strong>)</div>
+            </div>
+            <div style={{ marginTop: 8, color: '#aaa', fontSize: 13 }}>Unknown calories from entries without macro breakdown: <strong style={{ color: textColor }}>{Math.round(unknownKcal)} kcal</strong></div>
           </div>
         </div>
         <h3 style={{ color: accent, marginTop: 24, marginBottom: 12, fontWeight: 600 }}>Entries for {selectedDate}</h3>
