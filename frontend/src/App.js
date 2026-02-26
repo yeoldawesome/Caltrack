@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import MonthCalendar from './MonthCalendar';
 import BarcodeScanner from './BarcodeScanner';
 import Tesseract from 'tesseract.js';
+import Settings from './Settings';
 
 const darkBg = '#181c20';
 const cardBg = '#23272b';
@@ -14,78 +14,103 @@ const inputBorder = '#353b41';
 const placeholder = '#7b848b';
 
 function App() {
-      // ...existing code...
-      // Entry state for editing
-      const [editIndex, setEditIndex] = useState(null);
+  // Settings modal state
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState({ dailyLimit: 2000 });
 
-      // Edit handler: populate entry form with selected entry
-      function handleEditEntry(idx) {
-        setEditIndex(idx);
-        setEntry({ ...filteredEntries[idx] });
-      }
+  // Wrapper to update settings and keep dailyLimit in sync
+  const updateSettings = (newSettings) => {
+    const parsedLimit = newSettings && newSettings.dailyLimit !== undefined ? Number(newSettings.dailyLimit) : settings.dailyLimit;
+    const merged = { ...newSettings, dailyLimit: parsedLimit };
+    setSettings(merged);
+    setDailyLimit(parsedLimit);
+  };
 
-      // Delete handler: always try to remove entry from backend if it has an id
-      async function handleDeleteEntry(idx) {
-        const entryToDelete = filteredEntries[idx];
-        if (entryToDelete.id) {
-          await fetch(`http://localhost:4000/api/entry/${entryToDelete.id}`, { method: 'DELETE', credentials: 'include' });
-          // Refetch entries
-          const entriesRes = await fetch('http://localhost:4000/api/entries', { credentials: 'include' });
-          const data = await entriesRes.json();
-          setEntries(data);
-        } else {
-          // If no id, just remove locally
-          setEntries(entries => entries.filter(e => e !== entryToDelete));
-        }
-      }
+  // Load calorie limit from backend on mount
+  useEffect(() => {
+    fetch('http://localhost:4000/api/calorie-limit')
+      .then(res => res.json())
+      .then(data => {
+        const limit = (data && (data.calorieLimit || data.dailyLimit)) || 2000;
+        setSettings({ dailyLimit: limit });
+        setDailyLimit(limit);
+      })
+      .catch(() => {
+        // keep default if fetch fails
+      });
+  }, []);
 
-      // Save handler: update entry if editing, otherwise add new
-      async function handleSaveEntry() {
-        if (editIndex !== null) {
-          // Update entry in backend if it has an id
-          const entryToUpdate = filteredEntries[editIndex];
-          if (entryToUpdate.id) {
-            await fetch(`http://localhost:4000/api/entry/${entryToUpdate.id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify(entry)
-            });
-            // Refetch entries
-            const entriesRes = await fetch('http://localhost:4000/api/entries', { credentials: 'include' });
-            const data = await entriesRes.json();
-            setEntries(data);
-          } else {
-            // Update locally if no id
-            setEntries(entries => entries.map(e => e === entryToUpdate ? entry : e));
-          }
-          setEditIndex(null);
-          setEntry({ name: '', calories: '', protein: '', carbs: '', fat: '' });
-        } else {
-          // ...existing save logic...
-        }
-      }
-    // Nutrition options modal state
-    const [nutritionOptions, setNutritionOptions] = useState(null);
-    const [servingsInput, setServingsInput] = useState(1);
+  // Entry state for editing
+  const [editIndex, setEditIndex] = useState(null);
 
-    function roundVal(val) {
-      return val === '' || val === undefined ? '' : Math.round(Number(val) * 100) / 100;
+  // Edit handler: populate entry form with selected entry
+  function handleEditEntry(idx) {
+    setEditIndex(idx);
+    setEntry({ ...filteredEntries[idx] });
+  }
+
+  // Delete handler: always try to remove entry from backend if it has an id
+  async function handleDeleteEntry(idx) {
+    const entryToDelete = filteredEntries[idx];
+    if (entryToDelete.id) {
+      await fetch(`http://localhost:4000/api/entry/${entryToDelete.id}`, { method: 'DELETE', credentials: 'include' });
+      // Refetch entries
+      const entriesRes = await fetch('http://localhost:4000/api/entries', { credentials: 'include' });
+      const data = await entriesRes.json();
+      setEntries(data);
+    } else {
+      // If no id, just remove locally
+      setEntries(entries => entries.filter(e => e !== entryToDelete));
     }
+  }
 
-    function handleSelectNutritionOption(option) {
-      const servings = parseFloat(servingsInput) || 1;
-      setEntry(e => ({
-        ...e,
-        name: nutritionOptions.name,
-        calories: roundVal(option.calories * servings),
-        protein: roundVal(option.protein * servings),
-        carbs: roundVal(option.carbs * servings),
-        fat: roundVal(option.fat * servings),
-      }));
-      setNutritionOptions(null);
-      setServingsInput(1);
+  // Save handler: update entry if editing, otherwise add new
+  async function handleSaveEntry() {
+    if (editIndex !== null) {
+      // Update entry in backend if it has an id
+      const entryToUpdate = filteredEntries[editIndex];
+      if (entryToUpdate.id) {
+        await fetch(`http://localhost:4000/api/entry/${entryToUpdate.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(entry)
+        });
+        // Refetch entries
+        const entriesRes = await fetch('http://localhost:4000/api/entries', { credentials: 'include' });
+        const data = await entriesRes.json();
+        setEntries(data);
+      } else {
+        // Update locally if no id
+        setEntries(entries => entries.map(e => e === entryToUpdate ? entry : e));
+      }
+      setEditIndex(null);
+      setEntry({ name: '', calories: '', protein: '', carbs: '', fat: '' });
+    } else {
+      // ...existing save logic...
     }
+  }
+  // Nutrition options modal state
+  const [nutritionOptions, setNutritionOptions] = useState(null);
+  const [servingsInput, setServingsInput] = useState(1);
+
+  function roundVal(val) {
+    return val === '' || val === undefined ? '' : Math.round(Number(val) * 100) / 100;
+  }
+
+  function handleSelectNutritionOption(option) {
+    const servings = parseFloat(servingsInput) || 1;
+    setEntry(e => ({
+      ...e,
+      name: nutritionOptions.name,
+      calories: roundVal(option.calories * servings),
+      protein: roundVal(option.protein * servings),
+      carbs: roundVal(option.carbs * servings),
+      fat: roundVal(option.fat * servings),
+    }));
+    setNutritionOptions(null);
+    setServingsInput(1);
+  }
   // Calendar state
   const todayStr = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(todayStr);
@@ -114,6 +139,7 @@ function App() {
       }
       return '';
     };
+
     return {
       name: '',
       calories: extract(['calories', 'energy'], ['kcal', 'cal', '']),
@@ -123,32 +149,51 @@ function App() {
     };
   }
 
-  // Handle image upload and OCR
+  // Handle paste event for images
+  // ...existing code...
+
+  // Handle file input image upload
   const handleImageUpload = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
     setOcrError('');
     setOcrText('');
     setOcrLoading(true);
-    const file = e.target.files[0];
-    if (!file) return;
-    await processImage(file);
+    try {
+      await processImage(file);
+    } catch (err) {
+      setOcrError('Failed to read image.');
+      setOcrLoading(false);
+    }
   };
 
-  // Handle paste event for images
-  const handlePaste = async (e) => {
-    if (e.clipboardData && e.clipboardData.items) {
-      for (let i = 0; i < e.clipboardData.items.length; i++) {
-        const item = e.clipboardData.items[i];
-        if (item.type.indexOf('image') !== -1) {
-          const file = item.getAsFile();
-          setOcrError('');
-          setOcrText('');
-          setOcrLoading(true);
-          await processImage(file);
-          e.preventDefault();
-          break;
-        }
+  // Handle adding a new entry (submit form)
+  const handleAdd = async (e) => {
+    e.preventDefault();
+    if (!entry || !entry.name) return;
+    const newEntry = {
+      ...entry,
+      date: new Date(selectedDate).toISOString()
+    };
+    // Try to save to backend, fallback to local-only
+    try {
+      const res = await fetch('http://localhost:4000/api/entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(newEntry)
+      });
+      if (res.ok) {
+        const saved = await res.json();
+        setEntries(prev => [saved, ...prev]);
+      } else {
+        // fallback local
+        setEntries(prev => [newEntry, ...prev]);
       }
+    } catch (err) {
+      setEntries(prev => [newEntry, ...prev]);
     }
+    setEntry({ name: '', calories: '', protein: '', carbs: '', fat: '' });
   };
 
   // Shared image processing for upload and paste
@@ -163,7 +208,6 @@ function App() {
     }
     setOcrLoading(false);
   };
-    // (removed duplicate handleAdd)
   // Login/signup removed
   const [dailyLimit, setDailyLimit] = useState(2000);
   const [entry, setEntry] = useState({
@@ -187,31 +231,25 @@ function App() {
       .catch(() => setEntries([]));
   }, []);
 
-  const handleAdd = async (e) => {
-    e.preventDefault();
-    if (!entry.name || !entry.calories) return;
-    // Save to backend, using selectedDate with current local time for the entry's date
-    const now = new Date();
-    const timeStr = now.toTimeString().slice(0,8); // HH:MM:SS
-    const entryWithDate = { ...entry, date: `${selectedDate}T${timeStr}` };
-    try {
-      const res = await fetch('http://localhost:4000/api/entry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(entryWithDate),
-      });
-      if (res.ok) {
-        // Refetch entries after save
-        const entriesRes = await fetch('http://localhost:4000/api/entries', { credentials: 'include' });
-        const data = await entriesRes.json();
-        setEntries(data);
-        setEntry({ name: '', calories: '', protein: '', carbs: '', fat: '' });
+  const handlePaste = (e) => {
+    if (e.clipboardData && e.clipboardData.items) {
+      for (let i = 0; i < e.clipboardData.items.length; i++) {
+        const item = e.clipboardData.items[i];
+        if (item.type.indexOf('image') !== -1) {
+          const file = item.getAsFile();
+          setOcrError('');
+          setOcrText('');
+          setOcrLoading(true);
+          (async () => {
+            await processImage(file);
+          })();
+          e.preventDefault();
+          break;
+        }
       }
-    } catch (err) {
-      // Optionally show error
     }
   };
+        // ...existing code...
 
   // Filter entries by selected date (YYYY-MM-DD)
   const filteredEntries = entries.filter(e => {
@@ -219,12 +257,14 @@ function App() {
     return e.date.slice(0, 10) === selectedDate;
   });
   const total = filteredEntries.reduce(
-    (acc, e) => ({
-      calories: acc.calories + Number(e.calories),
-      protein: acc.protein + Number(e.protein),
-      carbs: acc.carbs + Number(e.carbs),
-      fat: acc.fat + Number(e.fat)
-    }),
+    (acc, e) => {
+      return {
+        calories: acc.calories + Number(e.calories),
+        protein: acc.protein + Number(e.protein),
+        carbs: acc.carbs + Number(e.carbs),
+        fat: acc.fat + Number(e.fat)
+      };
+    },
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
 
@@ -250,8 +290,25 @@ function App() {
         fontFamily: 'system-ui, sans-serif',
         padding: 0,
         margin: 0,
+        position: 'relative',
       }}
     >
+      {/* Gear icon for settings */}
+      <button
+        onClick={() => setSettingsOpen(true)}
+        style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: '#aaa', fontSize: 28, cursor: 'pointer', zIndex: 4100 }}
+        aria-label="Settings"
+      >
+        <span role="img" aria-label="settings">&#9881;</span>
+      </button>
+      {/* Settings modal */}
+      {settingsOpen && (
+        <Settings
+          onClose={() => setSettingsOpen(false)}
+          settings={settings}
+          setSettings={updateSettings}
+        />
+      )}
       <div
         style={{
           maxWidth: 480,
@@ -468,22 +525,7 @@ function App() {
         >
           <label style={{ fontWeight: 500 }}>
             Daily Calorie Limit:{' '}
-            <input
-              type="number"
-              value={dailyLimit}
-              min={0}
-              onChange={e => setDailyLimit(Number(e.target.value))}
-              style={{
-                width: 100,
-                background: inputBg,
-                color: textColor,
-                border: `1px solid ${inputBorder}`,
-                borderRadius: 6,
-                padding: '4px 8px',
-                marginLeft: 8,
-                outline: 'none',
-              }}
-            />
+            <span style={{ marginLeft: 8, color: textColor, fontWeight: 600 }}>{dailyLimit}</span>
           </label>
         </div>
         {/* Image upload for nutrition label */}
@@ -503,118 +545,72 @@ function App() {
             <pre style={{ color: '#aaa', marginTop: 8, fontSize: 13, whiteSpace: 'pre-wrap' }}>{ocrText}</pre>
           )}
         </div>
-        <form
-          onSubmit={handleAdd}
-          style={{
-            background: cardBg,
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 24,
-            border: `1px solid ${border}`,
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 8,
-            alignItems: 'center',
-          }}
-        >
-          <input
-            name="name"
-            placeholder="Food name"
-            value={entry.name}
-            onChange={handleChange}
-            style={{
-              background: inputBg,
-              color: textColor,
-              border: `1px solid ${inputBorder}`,
-              borderRadius: 6,
-              padding: '6px 10px',
-              width: 110,
-              outline: 'none',
-            }}
-            autoComplete="off"
-          />
-          <input
-            name="calories"
-            type="number"
-            placeholder="Calories"
-            value={entry.calories}
-            onChange={handleChange}
-            style={{
-              background: inputBg,
-              color: textColor,
-              border: `1px solid ${inputBorder}`,
-              borderRadius: 6,
-              padding: '6px 10px',
-              width: 80,
-              outline: 'none',
-            }}
-          />
-          <input
-            name="protein"
-            type="number"
-            placeholder="Protein (g)"
-            value={entry.protein}
-            onChange={handleChange}
-            style={{
-              background: inputBg,
-              color: textColor,
-              border: `1px solid ${inputBorder}`,
-              borderRadius: 6,
-              padding: '6px 10px',
-              width: 80,
-              outline: 'none',
-            }}
-          />
-          <input
-            name="carbs"
-            type="number"
-            placeholder="Carbs (g)"
-            value={entry.carbs}
-            onChange={handleChange}
-            style={{
-              background: inputBg,
-              color: textColor,
-              border: `1px solid ${inputBorder}`,
-              borderRadius: 6,
-              padding: '6px 10px',
-              width: 80,
-              outline: 'none',
-            }}
-          />
-          <input
-            name="fat"
-            type="number"
-            placeholder="Fat (g)"
-            value={entry.fat}
-            onChange={handleChange}
-            style={{
-              background: inputBg,
-              color: textColor,
-              border: `1px solid ${inputBorder}`,
-              borderRadius: 6,
-              padding: '6px 10px',
-              width: 80,
-              outline: 'none',
-            }}
-          />
-          <button
-            type="submit"
-            style={{
-              background: accent,
-              color: darkBg,
-              border: 'none',
-              borderRadius: 6,
-              padding: '8px 18px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              marginLeft: 8,
-              fontSize: 16,
-              boxShadow: '0 1px 4px #0003',
-              transition: 'background 0.2s',
-            }}
-          >
-            Add
-          </button>
+        <form onSubmit={handleAdd} style={{ background: cardBg, borderRadius: 8, padding: 12, marginBottom: 16, border: `1px solid ${border}`, boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={{ color: textColor, fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Food</label>
+              <input
+                name="name"
+                placeholder="e.g., Chicken salad"
+                value={entry.name}
+                onChange={handleChange}
+                style={{ background: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: 6, padding: '8px 10px', outline: 'none', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }}
+                autoComplete="off"
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <label style={{ color: textColor, fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Calories</label>
+              <input
+                name="calories"
+                type="number"
+                placeholder="kcal"
+                value={entry.calories}
+                onChange={handleChange}
+                style={{ background: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: 6, padding: '8px 10px', outline: 'none', fontSize: 14, boxSizing: 'border-box', maxWidth: '100%' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div>
+                <label style={{ color: '#aaa', fontSize: 11, marginBottom: 6, display: 'block' }}>Protein (g)</label>
+                <input
+                  name="protein"
+                  type="number"
+                  placeholder="0"
+                  value={entry.protein}
+                  onChange={handleChange}
+                  style={{ width: '100%', background: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: 6, padding: '6px 8px', outline: 'none', fontSize: 13, boxSizing: 'border-box', maxWidth: '100%' }}
+                />
+              </div>
+              <div>
+                <label style={{ color: '#aaa', fontSize: 11, marginBottom: 6, display: 'block' }}>Carbs (g)</label>
+                <input
+                  name="carbs"
+                  type="number"
+                  placeholder="0"
+                  value={entry.carbs}
+                  onChange={handleChange}
+                  style={{ width: '100%', background: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: 6, padding: '6px 8px', outline: 'none', fontSize: 13, boxSizing: 'border-box', maxWidth: '100%' }}
+                />
+              </div>
+              <div>
+                <label style={{ color: '#aaa', fontSize: 11, marginBottom: 6, display: 'block' }}>Fat (g)</label>
+                <input
+                  name="fat"
+                  type="number"
+                  placeholder="0"
+                  value={entry.fat}
+                  onChange={handleChange}
+                  style={{ width: '100%', background: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: 6, padding: '6px 8px', outline: 'none', fontSize: 13, boxSizing: 'border-box', maxWidth: '100%' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+              <button type="submit" style={{ background: accent, color: darkBg, border: 'none', borderRadius: 6, padding: '8px 12px', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Add</button>
+            </div>
+          </div>
         </form>
         <div
           style={{

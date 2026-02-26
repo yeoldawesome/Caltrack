@@ -132,6 +132,23 @@ app.get('/api/entries', async (req, res) => {
   res.json(db.data.entries);
 });
 
+// Daily calorie limit endpoints
+app.get('/api/calorie-limit', async (req, res) => {
+  await db.read();
+  res.json({ calorieLimit: db.data.calorieLimit || 2000 }); // Default 2000 if not set
+});
+
+app.post('/api/calorie-limit', async (req, res) => {
+  const { calorieLimit } = req.body;
+  if (!calorieLimit || isNaN(calorieLimit)) {
+    return res.status(400).json({ error: 'Invalid calorie limit' });
+  }
+  await db.read();
+  db.data.calorieLimit = Number(calorieLimit);
+  await db.write();
+  res.json({ success: true, calorieLimit: db.data.calorieLimit });
+});
+
 app.listen(PORT, () => {
   // Migration: assign IDs to entries without one
   (async () => {
@@ -147,6 +164,11 @@ app.listen(PORT, () => {
       }
     });
     if (changed) await db.write();
+    // Ensure calorieLimit exists
+    if (typeof db.data.calorieLimit === 'undefined') {
+      db.data.calorieLimit = 2000;
+      await db.write();
+    }
   })();
   console.log(`Server running on port ${PORT}`);
 });
