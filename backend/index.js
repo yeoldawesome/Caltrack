@@ -48,12 +48,11 @@ app.use(cors({
 }));
 app.use(bodyParser.json());
 app.use(session({
-  store: new SQLiteStore(),
   secret: 'caltrack_secret',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: true,
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'none'
   }
 }));
