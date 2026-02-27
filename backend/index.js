@@ -1,6 +1,50 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import express from 'express';
+import bodyParser from 'body-parser';
+import mongoose from 'mongoose';
+import cors from 'cors';
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.use(cors());
+app.use(bodyParser.json());
+
+mongoose.connect('mongodb://localhost:27017/caltrack', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+const sessionSchema = new mongoose.Schema({
+  date: String,
+  calories: Number,
+  barcode: String,
+});
+const Session = mongoose.model('Session', sessionSchema);
+
+app.get('/sessions', async (req, res) => {
+  try {
+    const sessions = await Session.find();
+    res.json(sessions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.post('/sessions', async (req, res) => {
+  const { date, calories, barcode } = req.body;
+  try {
+    const newSession = new Session({ date, calories, barcode });
+    await newSession.save();
+    res.status(201).json(newSession);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+import dotenv from 'dotenv';
+dotenv.config();
+import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import session from 'express-session';
