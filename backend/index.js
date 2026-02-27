@@ -61,7 +61,9 @@ const db = new Low(new JSONFile(path.join(process.cwd(), 'db.json')), { users: [
 const allowedOrigins = [
   'http://localhost:3000',
   'https://yeoldawesome.github.io',
-  'https://caltrack-8mwo.onrender.com'
+  'https://caltrack-8mwo.onrender.com',
+  'https://caltrack-k6yb.vercel.app',
+  'https://caltrack-k6yb-6m4hmnc5t-yeoldawesomes-projects.vercel.app'
 ];
 app.use(cors({
   origin: function(origin, callback) {

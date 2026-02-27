@@ -24,7 +24,7 @@ function App() {
 
   // Check session on mount
   useEffect(() => {
-    fetch('https://caltrack-8mwo.onrender.com/auth/user', { credentials: 'include' })
+    fetch('https://caltrack-k6yb.vercel.app/auth/user', { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
         if (d && d.user) {
@@ -45,7 +45,7 @@ function App() {
   async function handleAuthSubmit(e) {
     e.preventDefault();
     setAuthError('');
-    const url = authMode === 'login' ? 'https://caltrack-8mwo.onrender.com/auth/login' : 'https://caltrack-8mwo.onrender.com/auth/signup';
+    const url = authMode === 'login' ? 'https://caltrack-k6yb.vercel.app/auth/login' : 'https://caltrack-k6yb.vercel.app/auth/signup';
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -68,7 +68,7 @@ function App() {
   }
 
   async function handleLogout() {
-    await fetch('https://caltrack-8mwo.onrender.com/auth/logout', { method: 'POST', credentials: 'include' });
+    await fetch('https://caltrack-k6yb.vercel.app/auth/logout', { method: 'POST', credentials: 'include' });
     setUser(null);
     setAuthModal(true);
   }
@@ -90,7 +90,7 @@ function App() {
   // Load calorie limit for logged-in user
   useEffect(() => {
     if (!user) return;
-    fetch('https://caltrack-8mwo.onrender.com/api/calorie-limit', { credentials: 'include' })
+    fetch('https://caltrack-k6yb.vercel.app/api/calorie-limit', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         const limit = (data && (data.calorieLimit || data.dailyLimit)) || 2000;
@@ -115,9 +115,9 @@ function App() {
   async function handleDeleteEntry(idx) {
     const entryToDelete = filteredEntries[idx];
     if (entryToDelete.id) {
-      await fetch(`https://caltrack-8mwo.onrender.com/api/entry/${entryToDelete.id}`, { method: 'DELETE', credentials: 'include' });
+      await fetch(`https://caltrack-k6yb.vercel.app/api/entry/${entryToDelete.id}`, { method: 'DELETE', credentials: 'include' });
       // Refetch entries
-      const entriesRes = await fetch('https://caltrack-8mwo.onrender.com/api/entries', { credentials: 'include' });
+      const entriesRes = await fetch('https://caltrack-k6yb.vercel.app/api/entries', { credentials: 'include' });
       const data = await entriesRes.json();
       setEntries(data);
     } else {
