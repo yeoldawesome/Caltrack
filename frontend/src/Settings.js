@@ -7,7 +7,7 @@ const Settings = ({ onClose, settings, setSettings, user, handleLogout }) => {
 
   // Fetch calorie limit for logged-in user
   React.useEffect(() => {
-    fetch('/api/calorie-limit', { credentials: 'include' })
+    fetch((process.env.REACT_APP_API_URL || 'http://localhost:4000') + '/api/calorie-limit', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         setLocalSettings({ dailyLimit: data.calorieLimit });
@@ -23,7 +23,7 @@ const Settings = ({ onClose, settings, setSettings, user, handleLogout }) => {
     setSaving(true);
     setError('');
     try {
-      const res = await fetch('/api/calorie-limit', {
+      const res = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:4000') + '/api/calorie-limit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

@@ -1,3 +1,4 @@
+
 import dotenv from 'dotenv';
 dotenv.config();
 import express from 'express';
@@ -5,73 +6,71 @@ import bodyParser from 'body-parser';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import session from 'express-session';
-import connectSqlite3 from 'connect-sqlite3';
-const SQLiteStore = connectSqlite3(session);
-import { Low } from 'lowdb';
-import { JSONFile } from 'lowdb/node';
-import path from 'path';
 import bcrypt from 'bcrypt';
 
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  process.env.FRONTEND_ORIGIN // for deployment, set this env var
+].filter(Boolean);
+
 const app = express();
-const PORT = process.env.PORT || 5000;
-app.use(cors());
-app.use(bodyParser.json());
-const sessionSchema = new mongoose.Schema({
-  date: String,
-  calories: Number,
-  barcode: String,
-});
-const Session = mongoose.model('Session', sessionSchema);
-
-app.get('/sessions', async (req, res) => {
-  try {
-    const sessions = await Session.find();
-    res.json(sessions);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-app.post('/sessions', async (req, res) => {
-  const { date, calories, barcode } = req.body;
-  try {
-    const newSession = new Session({ date, calories, barcode });
-    await newSession.save();
-    res.status(201).json(newSession);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// MongoDB Atlas connection
-const mongoUri = "mongodb+srv://dnlonglett_db_user:45JY8GtL8ujhNY71@caltracker.6y4aqcw.mongodb.net/?appName=CalTracker";
-mongoose.connect(mongoUri)
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
-
-// Define schemas
-const UserSchema = new mongoose.Schema({ email: String, password: String });
-const EntrySchema = new mongoose.Schema({ userId: mongoose.Schema.Types.ObjectId, date: String, calories: Number, food: String });
-const User = mongoose.model('User', UserSchema);
-const Entry = mongoose.model('Entry', EntrySchema);
-
-
-// DB setup
-const db = new Low(new JSONFile(path.join(process.cwd(), 'db.json')), { users: [], entries: [], favorites: [], calorieLimit: {}, });
+const PORT = process.env.PORT || 4000;
 
 app.use(cors({
-  origin: true,
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
+  next();
+});
 app.use(bodyParser.json());
 app.use(session({
   secret: 'caltrack_secret',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'none'
+    secure: false,
+    sameSite: 'lax'
   }
 }));
+
+// MongoDB Atlas connection
+const mongoUri = process.env.MONGO_URI;
+mongoose.connect(mongoUri)
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
+// Schemas
+const UserSchema = new mongoose.Schema({ email: String, password: String });
+const EntrySchema = new mongoose.Schema({
+  userId: mongoose.Schema.Types.ObjectId,
+  date: String,
+  calories: Number,
+  food: String,
+  protein: { type: Number, default: 0 },
+  carbs: { type: Number, default: 0 },
+  fat: { type: Number, default: 0 }
+});
+const CalorieLimitSchema = new mongoose.Schema({ userId: mongoose.Schema.Types.ObjectId, calorieLimit: { type: Number, default: 2000 } });
+const FavoriteSchema = new mongoose.Schema({ userId: mongoose.Schema.Types.ObjectId, food: String, details: mongoose.Schema.Types.Mixed });
+
+const User = mongoose.model('User', UserSchema);
+const Entry = mongoose.model('Entry', EntrySchema);
+const CalorieLimit = mongoose.model('CalorieLimit', CalorieLimitSchema);
+const Favorite = mongoose.model('Favorite', FavoriteSchema);
 
 // Auth helpers
 function ensureAuth(req, res, next) {
@@ -130,149 +129,115 @@ app.get('/auth/user', async (req, res) => {
   }
 });
 
-// Save entry (per user)
-app.post('/api/entry', ensureAuth, async (req, res) => {
-  let entryDate = req.body.date;
-  if (!entryDate) entryDate = new Date().toISOString();
-  const entry = new Entry({ ...req.body, date: entryDate, userId: req.session.userId });
-  await entry.save();
-  res.json({ success: true, id: entry._id });
-});
-
-// Get entries
-
-// Delete entry by id
-// Update entry by id
-app.put('/api/entry/:id', async (req, res) => {
-  await db.read();
-  const id = req.params.id;
-  console.log('PUT /api/entry/:id called with id:', id);
-  console.log('All entry ids:', db.data.entries.map(e => e.id));
-  let found = false;
-  db.data.entries = db.data.entries.map(e => {
-    if (String(e.id) === String(id)) {
-      found = true;
-      return { ...e, ...req.body, id: e.id };
-    }
-    return e;
-  });
-  await db.write();
-  if (found) {
-    res.json({ success: true });
-  } else {
-    res.status(404).json({ error: 'Entry not found' });
-  }
-});
-app.delete('/api/entry/:id', async (req, res) => {
-  await db.read();
-  const id = req.params.id;
-  const before = db.data.entries.length;
-  db.data.entries = db.data.entries.filter(e => String(e.id) !== String(id));
-  const after = db.data.entries.length;
-  await db.write();
-  if (after < before) {
-    res.json({ success: true });
-  } else {
-    res.status(404).json({ error: 'Entry not found' });
-  }
-});
-
-// Get entries for current user
-app.get('/api/entries', ensureAuth, async (req, res) => {
-  const userEntries = await Entry.find({ userId: req.session.userId });
-  res.json(userEntries);
-});
-
-// Get recent entries (last N) for user
-app.get('/api/recent', ensureAuth, async (req, res) => {
-  await db.read();
-  const limit = parseInt(req.query.limit || '10', 10);
-  const entries = (db.data.entries || []).filter(e => e.userId === req.session.userId).slice().sort((a, b) => {
-    return new Date(b.date) - new Date(a.date);
-  }).slice(0, limit);
-  res.json(entries);
-});
-
-// Favorites endpoints (per user)
-app.get('/api/favorites', ensureAuth, async (req, res) => {
-  await db.read();
-  const userFavs = (db.data.favorites || []).filter(f => f.userId === req.session.userId);
-  res.json(userFavs);
-});
-
-app.post('/api/favorites', ensureAuth, async (req, res) => {
-  await db.read();
-  if (!db.data.favorites) db.data.favorites = [];
-  let maxId = 0;
-  db.data.favorites.forEach(f => { if (f.id && Number(f.id) > maxId) maxId = Number(f.id); });
-  const fav = { ...req.body, id: maxId + 1, userId: req.session.userId };
-  db.data.favorites.push(fav);
-  await db.write();
-  res.json({ success: true, id: fav.id });
-});
-
-app.delete('/api/favorites/:id', ensureAuth, async (req, res) => {
-  await db.read();
-  const id = req.params.id;
-  const before = (db.data.favorites || []).length;
-  db.data.favorites = (db.data.favorites || []).filter(f => String(f.id) !== String(id) || f.userId !== req.session.userId);
-  const after = db.data.favorites.length;
-  await db.write();
-  if (after < before) res.json({ success: true });
-  else res.status(404).json({ error: 'Favorite not found' });
-});
-
-// Daily calorie limit endpoints (per user)
+// Calorie limit endpoints
 app.get('/api/calorie-limit', ensureAuth, async (req, res) => {
-  await db.read();
-  const userLimit = db.data.calorieLimit[req.session.userId] || 2000;
-  res.json({ calorieLimit: userLimit });
+  let limit = await CalorieLimit.findOne({ userId: req.session.userId });
+  if (!limit) {
+    limit = new CalorieLimit({ userId: req.session.userId, calorieLimit: 2000 });
+    await limit.save();
+  }
+  res.json({ calorieLimit: limit.calorieLimit });
 });
-
 app.post('/api/calorie-limit', ensureAuth, async (req, res) => {
   const { calorieLimit } = req.body;
   if (!calorieLimit || isNaN(calorieLimit)) {
     return res.status(400).json({ error: 'Invalid calorie limit' });
   }
-  await db.read();
-  db.data.calorieLimit[req.session.userId] = Number(calorieLimit);
-  await db.write();
-  res.json({ success: true, calorieLimit: db.data.calorieLimit[req.session.userId] });
+  let limit = await CalorieLimit.findOneAndUpdate(
+    { userId: req.session.userId },
+    { calorieLimit: Number(calorieLimit) },
+    { new: true, upsert: true }
+  );
+  res.json({ success: true, calorieLimit: limit.calorieLimit });
+});
+
+// Entries endpoints (CRUD)
+app.get('/api/entries', ensureAuth, async (req, res) => {
+  const userEntries = await Entry.find({ userId: req.session.userId });
+  // Map backend fields to include name, protein, carbs, fat for frontend compatibility
+  const mappedEntries = userEntries.map(e => ({
+    ...e.toObject(),
+    name: e.food || '',
+    protein: e.protein ?? '',
+    carbs: e.carbs ?? '',
+    fat: e.fat ?? ''
+  }));
+  res.json(mappedEntries);
+});
+app.post('/api/entry', ensureAuth, async (req, res) => {
+  let { date, calories, food, protein, carbs, fat } = req.body;
+  if (!calories || !food) return res.status(400).json({ error: 'Missing fields' });
+  if (!date) date = new Date().toISOString();
+  const entry = new Entry({
+    userId: req.session.userId,
+    date,
+    calories,
+    food,
+    protein: protein ?? 0,
+    carbs: carbs ?? 0,
+    fat: fat ?? 0
+  });
+  await entry.save();
+  res.status(201).json(entry);
+});
+app.put('/api/entry/:id', ensureAuth, async (req, res) => {
+  const { id } = req.params;
+  const entry = await Entry.findOneAndUpdate(
+    { _id: id, userId: req.session.userId },
+    req.body,
+    { new: true }
+  );
+  if (!entry) return res.status(404).json({ error: 'Entry not found' });
+  res.json(entry);
+});
+app.delete('/api/entry/:id', ensureAuth, async (req, res) => {
+  const { id } = req.params;
+  const result = await Entry.deleteOne({ _id: id, userId: req.session.userId });
+  if (result.deletedCount === 0) return res.status(404).json({ error: 'Entry not found' });
+  res.json({ success: true });
+});
+
+// Favorites endpoints (CRUD)
+app.get('/api/favorites', ensureAuth, async (req, res) => {
+  const favs = await Favorite.find({ userId: req.session.userId });
+  res.json(favs);
+});
+app.post('/api/favorites', ensureAuth, async (req, res) => {
+  const { food, details } = req.body;
+  if (!food) return res.status(400).json({ error: 'Missing food' });
+  const fav = new Favorite({ userId: req.session.userId, food, details });
+  await fav.save();
+  res.status(201).json(fav);
+});
+app.delete('/api/favorites/:id', ensureAuth, async (req, res) => {
+  const { id } = req.params;
+  const result = await Favorite.deleteOne({ _id: id, userId: req.session.userId });
+  if (result.deletedCount === 0) return res.status(404).json({ error: 'Favorite not found' });
+  res.json({ success: true });
+});
+
+
+// Get recent entries for the logged-in user
+app.get('/api/recent', ensureAuth, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const recentEntries = await Entry.find({ userId: req.session.userId })
+      .sort({ date: -1, _id: -1 })
+      .limit(limit);
+    // Map backend fields to include name, protein, carbs, fat for frontend compatibility
+    const mappedEntries = recentEntries.map(e => ({
+      ...e.toObject(),
+      name: e.food || '',
+      protein: e.protein ?? '',
+      carbs: e.carbs ?? '',
+      fat: e.fat ?? ''
+    }));
+    res.json(mappedEntries);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch recent entries' });
+  }
 });
 
 app.listen(PORT, () => {
-  // Migration: assign IDs to entries without one
-  (async () => {
-    await db.read();
-    let maxId = 0;
-    db.data.entries.forEach(e => { if (e.id && Number(e.id) > maxId) maxId = Number(e.id); });
-    let changed = false;
-    db.data.entries.forEach(e => {
-      if (!e.id) {
-        maxId++;
-        e.id = maxId;
-        changed = true;
-      }
-    });
-    if (changed) await db.write();
-    // Ensure calorieLimit exists and is an object
-    if (typeof db.data.calorieLimit === 'undefined') {
-      db.data.calorieLimit = {};
-      await db.write();
-    }
-    if (typeof db.data.calorieLimit === 'number') {
-      const oldLimit = db.data.calorieLimit;
-      db.data.calorieLimit = {};
-      (db.data.users || []).forEach(u => {
-        db.data.calorieLimit[u.id] = oldLimit;
-      });
-      await db.write();
-    }
-    // Ensure favorites array exists
-    if (!db.data.favorites) {
-      db.data.favorites = [];
-      await db.write();
-    }
-  })();
   console.log(`Server running on port ${PORT}`);
 });

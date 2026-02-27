@@ -1,3 +1,5 @@
+// Set API base URL for backend
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:4000';
 import React, { useState, useEffect, useRef } from 'react';
 import MonthCalendar from './MonthCalendar';
 import BarcodeScanner from './BarcodeScanner';
@@ -24,7 +26,7 @@ function App() {
 
   // Check session on mount
   useEffect(() => {
-    fetch('/auth/user', { credentials: 'include' })
+    fetch(`${API_BASE}/auth/user`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
         if (d && d.user) {
@@ -45,7 +47,7 @@ function App() {
   async function handleAuthSubmit(e) {
     e.preventDefault();
     setAuthError('');
-    const url = authMode === 'login' ? '/auth/login' : '/auth/signup';
+    const url = authMode === 'login' ? `${API_BASE}/auth/login` : `${API_BASE}/auth/signup`;
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -68,7 +70,7 @@ function App() {
   }
 
   async function handleLogout() {
-    await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
+    await fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'include' });
     setUser(null);
     setAuthModal(true);
   }
@@ -90,7 +92,7 @@ function App() {
   // Load calorie limit for logged-in user
   useEffect(() => {
     if (!user) return;
-    fetch('/api/calorie-limit', { credentials: 'include' })
+    fetch(`${API_BASE}/api/calorie-limit`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         const limit = (data && (data.calorieLimit || data.dailyLimit)) || 2000;
@@ -114,11 +116,17 @@ function App() {
   // Delete handler: always try to remove entry from backend if it has an id
   async function handleDeleteEntry(idx) {
     const entryToDelete = filteredEntries[idx];
-    if (entryToDelete.id) {
-      await fetch(`/api/entry/${entryToDelete.id}`, { method: 'DELETE', credentials: 'include' });
+    console.log('Attempting to delete entry:', entryToDelete);
+    if (entryToDelete.id || entryToDelete._id) {
+      const id = entryToDelete.id || entryToDelete._id;
+      const res = await fetch(`${API_BASE}/api/entry/${id}`, { method: 'DELETE', credentials: 'include' });
+      const resJson = await res.json().catch(() => ({}));
+      console.log('Delete response:', res.status, resJson);
       // Refetch entries
-      const entriesRes = await fetch('/api/entries', { credentials: 'include' });
-      const data = await entriesRes.json();
+      const entriesRes = await fetch(`${API_BASE}/api/entries`, { credentials: 'include' });
+      let data = await entriesRes.json();
+      // Normalize _id to id for all entries
+      data = data.map(e => ({ ...e, id: e.id || e._id }));
       setEntries(data);
     } else {
       // If no id, just remove locally
@@ -132,14 +140,14 @@ function App() {
       // Update entry in backend if it has an id
       const entryToUpdate = filteredEntries[editIndex];
       if (entryToUpdate.id) {
-        await fetch(`/api/entry/${entryToUpdate.id}`, {
+        await fetch(`${API_BASE}/api/entry/${entryToUpdate.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify(entry)
         });
         // Refetch entries
-        const entriesRes = await fetch('/api/entries', { credentials: 'include' });
+        const entriesRes = await fetch(`${API_BASE}/api/entries`, { credentials: 'include' });
         const data = await entriesRes.json();
         setEntries(data);
       } else {
@@ -235,6 +243,7 @@ function App() {
     if (!entry || !entry.name) return;
     const newEntry = {
       ...entry,
+      food: entry.name,
       // keep date as YYYY-MM-DD so optimistic entry matches filtered date
       date: selectedDate
     };
@@ -245,7 +254,7 @@ function App() {
 
     // Try to save to backend, replace temp entry with saved response when available
     try {
-      const res = await fetch('/api/entry', {
+      const res = await fetch(`${API_BASE}/api/entry`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -258,7 +267,7 @@ function App() {
         setEntries(prev => prev.map(e => e.tempId === tempId ? savedEntry : e));
         // Then refresh full list from backend to ensure UI matches DB
         try {
-          const entriesRes = await fetch('/api/entries', { credentials: 'include' });
+          const entriesRes = await fetch(`${API_BASE}/api/entries`, { credentials: 'include' });
           const data = await entriesRes.json();
           if (Array.isArray(data)) setEntries(data);
           // refresh recent meals so the Recent modal shows newly added meals
@@ -303,7 +312,7 @@ function App() {
   // Fetch entries for logged-in user
   useEffect(() => {
     if (!user) return;
-    fetch('/api/entries', { credentials: 'include' })
+    fetch(`${API_BASE}/api/entries`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setEntries(data);
@@ -321,7 +330,7 @@ function App() {
   // Fetch favorites for logged-in user
   useEffect(() => {
     if (!user) return;
-    fetch('/api/favorites', { credentials: 'include' })
+    fetch(`${API_BASE}/api/favorites`, { credentials: 'include' })
       .then(r => r.json())
       .then(d => Array.isArray(d) ? setFavorites(d) : setFavorites([]))
       .catch(() => setFavorites([]));
@@ -329,7 +338,7 @@ function App() {
 
   async function fetchRecent(limit = 10) {
     try {
-      const res = await fetch(`/api/recent?limit=${limit}`, { credentials: 'include' });
+      const res = await fetch(`${API_BASE}/api/recent?limit=${limit}`, { credentials: 'include' });
       const data = await res.json();
       setRecentMeals(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -339,11 +348,19 @@ function App() {
 
   async function addFavoriteFromEntry(entryObj) {
     try {
-      await fetch('/api/favorites', {
+      await fetch(`${API_BASE}/api/favorites`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ name: entryObj.name, calories: entryObj.calories, protein: entryObj.protein, carbs: entryObj.carbs, fat: entryObj.fat })
+        body: JSON.stringify({
+          food: entryObj.name,
+          details: {
+            calories: Number(entryObj.calories) || 0,
+            protein: Number(entryObj.protein) || 0,
+            carbs: Number(entryObj.carbs) || 0,
+            fat: Number(entryObj.fat) || 0
+          }
+        })
       });
-      const res = await fetch('/api/favorites', { credentials: 'include' });
+      const res = await fetch(`${API_BASE}/api/favorites`, { credentials: 'include' });
       const data = await res.json();
       setFavorites(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -354,12 +371,12 @@ function App() {
   async function addMealFromTemplate(template) {
     try {
       const newEntry = { ...template, date: selectedDate };
-      const res = await fetch('/api/entry', {
+      const res = await fetch(`${API_BASE}/api/entry`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(newEntry)
       });
       if (res.ok) {
         // refresh entries
-        const entriesRes = await fetch('/api/entries', { credentials: 'include' });
+        const entriesRes = await fetch(`${API_BASE}/api/entries`, { credentials: 'include' });
         const data = await entriesRes.json();
         if (Array.isArray(data)) setEntries(data);
       }
@@ -370,8 +387,9 @@ function App() {
 
   async function removeFavorite(id) {
     try {
-      await fetch(`/api/favorites/${id}`, { method: 'DELETE', credentials: 'include' });
-      const res = await fetch('/api/favorites', { credentials: 'include' });
+      if (!id) return;
+      await fetch(`${API_BASE}/api/favorites/${id}`, { method: 'DELETE', credentials: 'include' });
+      const res = await fetch(`${API_BASE}/api/favorites`, { credentials: 'include' });
       const data = await res.json();
       setFavorites(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -381,13 +399,13 @@ function App() {
 
   function findFavoriteForEntry(entryObj) {
     if (!entryObj || !favorites) return null;
-    return favorites.find(f => String(f.name) === String(entryObj.name) && String(f.calories) === String(entryObj.calories));
+    return favorites.find(f => String(f.food) === String(entryObj.name) && String(f.details && f.details.calories) === String(entryObj.calories));
   }
 
   async function toggleFavoriteForEntry(entryObj) {
     const existing = findFavoriteForEntry(entryObj);
     if (existing) {
-      await removeFavorite(existing.id);
+      await removeFavorite(existing.id || existing._id);
     } else {
       await addFavoriteFromEntry(entryObj);
     }
@@ -432,13 +450,19 @@ function App() {
 
   // Compute macro calories and unknown calories
   const macroKcal = {
-    protein: total.protein * 4,
-    carbs: total.carbs * 4,
-    fat: total.fat * 9,
+    protein: Number(total.protein) * 4 || 0,
+    carbs: Number(total.carbs) * 4 || 0,
+    fat: Number(total.fat) * 9 || 0,
   };
   const sumMacroKcal = macroKcal.protein + macroKcal.carbs + macroKcal.fat;
   let unknownKcal = Number(total.calories) - sumMacroKcal;
   if (isNaN(unknownKcal) || unknownKcal < 0) unknownKcal = 0;
+
+  // Defensive: ensure all values for PieChart are numbers
+  macroKcal.protein = isNaN(macroKcal.protein) ? 0 : macroKcal.protein;
+  macroKcal.carbs = isNaN(macroKcal.carbs) ? 0 : macroKcal.carbs;
+  macroKcal.fat = isNaN(macroKcal.fat) ? 0 : macroKcal.fat;
+  unknownKcal = isNaN(unknownKcal) ? 0 : unknownKcal;
 
   // Simple SVG PieChart component
   function PieChart({ segments, size = 140 }) {
@@ -725,6 +749,11 @@ function App() {
                     <div>
                       <div style={{ fontWeight: 600 }}>{r.name}</div>
                       <div style={{ color: '#aaa', fontSize: 13 }}>{r.calories} kcal</div>
+                      <div style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>
+                        {r.protein !== undefined && r.protein !== '' && `Protein: ${r.protein}g`}
+                        {r.carbs !== undefined && r.carbs !== '' && ` | Carbs: ${r.carbs}g`}
+                        {r.fat !== undefined && r.fat !== '' && ` | Fat: ${r.fat}g`}
+                      </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <button onClick={() => { addMealFromTemplate(r); setRecentOpen(false); }} style={{ background: accent, color: darkBg, border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Add</button>
@@ -755,14 +784,19 @@ function App() {
               <div style={{ maxHeight: 320, overflow: 'auto' }}>
                 {favorites.length === 0 && <div style={{ color: '#aaa' }}>No favorites yet</div>}
                 {favorites.map((f) => (
-                  <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${border}` }}>
+                  <div key={f.id || f._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${border}` }}>
                     <div>
-                      <div style={{ fontWeight: 600 }}>{f.name}</div>
-                      <div style={{ color: '#aaa', fontSize: 13 }}>{f.calories} kcal</div>
+                      <div style={{ fontWeight: 600 }}>{f.food}</div>
+                      <div style={{ color: '#aaa', fontSize: 13 }}>{f.details && f.details.calories} kcal</div>
+                      <div style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>
+                        {f.details && f.details.protein !== undefined && f.details.protein !== '' && `Protein: ${f.details.protein}g`}
+                        {f.details && f.details.carbs !== undefined && f.details.carbs !== '' && ` | Carbs: ${f.details.carbs}g`}
+                        {f.details && f.details.fat !== undefined && f.details.fat !== '' && ` | Fat: ${f.details.fat}g`}
+                      </div>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button onClick={() => { addMealFromTemplate(f); setFavoritesOpen(false); }} style={{ background: accent, color: darkBg, border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Add</button>
-                      <button onClick={() => removeFavorite(f.id)} style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Remove</button>
+                      <button onClick={() => removeFavorite(f.id || f._id)} style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }}>Remove</button>
                     </div>
                   </div>
                 ))}
