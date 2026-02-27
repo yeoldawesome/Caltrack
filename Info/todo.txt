@@ -3,10 +3,10 @@ barcode DONE
 delete or modify entered items DONE
 login stuff DONE??
 image upload serving options DONE
-cal limit per week thingy
 better cal input DONE
 save foods DONE
 rename mongo db
 Fix Favorite not working DONE
 Live Hosting
 Scan Barcode work on iphone
+cal limit per week thingy

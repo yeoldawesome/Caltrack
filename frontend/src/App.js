@@ -2,6 +2,7 @@
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:4000';
 import React, { useState, useEffect, useRef } from 'react';
 import MonthCalendar from './MonthCalendar';
+import WeeklyCount from './WeeklyCount';
 import BarcodeScanner from './BarcodeScanner';
 import Tesseract from 'tesseract.js';
 import Settings from './Settings';
@@ -185,6 +186,7 @@ function App() {
   const todayStr = new Date().toISOString().slice(0, 10);
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [weeklyOpen, setWeeklyOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() };
@@ -740,23 +742,40 @@ function App() {
           </div>
         )}
         {barcodeError && <div style={{ color: '#ef4444', marginBottom: 8 }}>{barcodeError}</div>}
-        <button
-          style={{
-            background: accent,
-            color: darkBg,
-            border: 'none',
-            borderRadius: 6,
-            padding: '8px 18px',
-            fontWeight: 600,
-            fontSize: 16,
-            marginBottom: 16,
-            cursor: 'pointer',
-            boxShadow: '0 1px 4px #0003',
-          }}
-          onClick={() => setCalendarOpen(true)}
-        >
-          Calander
-        </button>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+          <button
+            style={{
+              background: accent,
+              color: darkBg,
+              border: 'none',
+              borderRadius: 6,
+              padding: '8px 18px',
+              fontWeight: 600,
+              fontSize: 16,
+              cursor: 'pointer',
+              boxShadow: '0 1px 4px #0003',
+            }}
+            onClick={() => setCalendarOpen(true)}
+          >
+            Calendar
+          </button>
+          <button
+            style={{
+              background: accent,
+              color: darkBg,
+              border: 'none',
+              borderRadius: 6,
+              padding: '8px 18px',
+              fontWeight: 600,
+              fontSize: 16,
+              cursor: 'pointer',
+              boxShadow: '0 1px 4px #0003',
+            }}
+            onClick={() => setWeeklyOpen(true)}
+          >
+            Weekly Count
+          </button>
+        </div>
         {/* Cook Book buttons moved under Upload box */}
 
         {recentOpen && (
@@ -862,6 +881,24 @@ function App() {
                 dailyLimit={dailyLimit}
               />
               {/* Removed entries list from calendar modal for cleaner UI */}
+            </div>
+          </div>
+        )}
+        {weeklyOpen && (
+          <div style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            background: '#000a',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+          }}
+            onClick={() => setWeeklyOpen(false)}
+          >
+            <div style={{ position: 'relative', background: cardBg, borderRadius: 16, padding: 24, minWidth: 360 }} onClick={e => e.stopPropagation()}>
+              <button onClick={() => setWeeklyOpen(false)} style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: 'none', color: '#aaa', fontSize: 22, cursor: 'pointer' }}>&times;</button>
+              <WeeklyCount entries={entries} dailyLimit={dailyLimit} />
             </div>
           </div>
         )}
