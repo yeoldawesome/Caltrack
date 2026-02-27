@@ -22,7 +22,15 @@ app.use(cors({
   credentials: true
 }));
 app.use(bodyParser.json());
-app.use(session({ secret: 'caltrack_secret', resave: false, saveUninitialized: false }));
+app.use(session({
+  secret: 'caltrack_secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: true,
+    sameSite: 'none'
+  }
+}));
 
 // Auth helpers
 function ensureAuth(req, res, next) {
