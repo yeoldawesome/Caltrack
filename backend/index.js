@@ -12,6 +12,8 @@ import path from 'path';
 import bcrypt from 'bcrypt';
 
 const app = express();
+// Trust proxy for correct secure cookie handling on Render
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 4000;
 
 // DB setup
