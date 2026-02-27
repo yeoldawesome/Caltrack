@@ -370,7 +370,31 @@ function App() {
 
   async function addMealFromTemplate(template) {
     try {
-      const newEntry = { ...template, date: selectedDate };
+      let newEntry;
+      if (template && typeof template === 'object' && template.details) {
+        // Securely extract only allowed fields from favorite object
+        const details = template.details || {};
+        newEntry = {
+          food: typeof template.food === 'string' ? template.food : '',
+          calories: typeof details.calories === 'number' ? details.calories : Number(details.calories) || 0,
+          protein: typeof details.protein === 'number' ? details.protein : Number(details.protein) || 0,
+          carbs: typeof details.carbs === 'number' ? details.carbs : Number(details.carbs) || 0,
+          fat: typeof details.fat === 'number' ? details.fat : Number(details.fat) || 0,
+          date: selectedDate
+        };
+      } else if (template && typeof template === 'object') {
+        // Securely extract only allowed fields from entry/recent object
+        newEntry = {
+          food: typeof template.food === 'string' ? template.food : (typeof template.name === 'string' ? template.name : ''),
+          calories: typeof template.calories === 'number' ? template.calories : Number(template.calories) || 0,
+          protein: typeof template.protein === 'number' ? template.protein : Number(template.protein) || 0,
+          carbs: typeof template.carbs === 'number' ? template.carbs : Number(template.carbs) || 0,
+          fat: typeof template.fat === 'number' ? template.fat : Number(template.fat) || 0,
+          date: selectedDate
+        };
+      } else {
+        throw new Error('Invalid template for meal entry');
+      }
       const res = await fetch(`${API_BASE}/api/entry`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(newEntry)
       });

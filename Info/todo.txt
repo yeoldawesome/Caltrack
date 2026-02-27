@@ -1,4 +1,4 @@
-fix calander date thingy
+fix calander date thingy DONE
 barcode DONE
 delete or modify entered items DONE
 login stuff DONE??
@@ -7,3 +7,4 @@ cal limit per week thingy
 better cal input DONE
 save foods DONE
 rename mongo db
+Fix Favorite not working DONE
