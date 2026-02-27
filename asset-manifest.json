@@ -1,10 +1,10 @@
 {
   "files": {
-    "main.js": "/Caltrack/static/js/main.389f8821.js",
+    "main.js": "/Caltrack/static/js/main.b1281fc4.js",
     "index.html": "/Caltrack/index.html",
-    "main.389f8821.js.map": "/Caltrack/static/js/main.389f8821.js.map"
+    "main.b1281fc4.js.map": "/Caltrack/static/js/main.b1281fc4.js.map"
   },
   "entrypoints": [
-    "static/js/main.389f8821.js"
+    "static/js/main.b1281fc4.js"
   ]
 }
