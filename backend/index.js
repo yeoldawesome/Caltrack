@@ -1,5 +1,4 @@
 // Trust proxy for correct secure cookie handling on Render
-app.set('trust proxy', 1);
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
@@ -12,14 +11,11 @@ import path from 'path';
 import bcrypt from 'bcrypt';
 
 const app = express();
-// Trust proxy for correct secure cookie handling on Render
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 4000;
 
 // DB setup
 const db = new Low(new JSONFile(path.join(process.cwd(), 'db.json')), { users: [], entries: [], favorites: [], calorieLimit: {}, });
-// Trust proxy for correct secure cookie handling on Render
-app.set('trust proxy', 1);
 
 const allowedOrigins = [
   'http://localhost:3000',
