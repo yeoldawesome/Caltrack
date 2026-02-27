@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import session from 'express-session';
+import SQLiteStore from 'connect-sqlite3';
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 import path from 'path';
@@ -23,6 +24,7 @@ app.use(cors({
 }));
 app.use(bodyParser.json());
 app.use(session({
+  store: new SQLiteStore(),
   secret: 'caltrack_secret',
   resave: false,
   saveUninitialized: false,
