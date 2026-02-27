@@ -11,6 +11,7 @@ import bcrypt from 'bcrypt';
 const allowedOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
+  'http://10.26.52.151:3000',
   process.env.FRONTEND_ORIGIN // for deployment, set this env var
 ].filter(Boolean);
 

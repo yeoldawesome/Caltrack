@@ -1,7 +1,7 @@
 fix calander date thingy DONE
 barcode DONE
 delete or modify entered items DONE
-login stuff DONE??
+login stuff DONE
 image upload serving options DONE
 better cal input DONE
 save foods DONE
@@ -11,7 +11,12 @@ Username and profile pic DONE
 Fix Favorite not working DONE
 change password DONE
 
+login with username
 Live Hosting
 Scan Barcode work on iphone
 forgot password 
 Friends stuff
+
+
+NOTES
+front end env changes  between local host and computer ip
