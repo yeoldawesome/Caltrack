@@ -24,7 +24,7 @@ function App() {
 
   // Check session on mount
   useEffect(() => {
-    fetch('https://caltrack-k6yb.vercel.app/auth/user', { credentials: 'include' })
+    fetch('/auth/user', { credentials: 'include' })
       .then(r => r.json())
       .then(d => {
         if (d && d.user) {
@@ -45,7 +45,7 @@ function App() {
   async function handleAuthSubmit(e) {
     e.preventDefault();
     setAuthError('');
-    const url = authMode === 'login' ? 'https://caltrack-k6yb.vercel.app/auth/login' : 'https://caltrack-k6yb.vercel.app/auth/signup';
+    const url = authMode === 'login' ? '/auth/login' : '/auth/signup';
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -68,7 +68,7 @@ function App() {
   }
 
   async function handleLogout() {
-    await fetch('https://caltrack-k6yb.vercel.app/auth/logout', { method: 'POST', credentials: 'include' });
+    await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
     setUser(null);
     setAuthModal(true);
   }
@@ -90,7 +90,7 @@ function App() {
   // Load calorie limit for logged-in user
   useEffect(() => {
     if (!user) return;
-    fetch('https://caltrack-k6yb.vercel.app/api/calorie-limit', { credentials: 'include' })
+    fetch('/api/calorie-limit', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         const limit = (data && (data.calorieLimit || data.dailyLimit)) || 2000;
@@ -115,9 +115,9 @@ function App() {
   async function handleDeleteEntry(idx) {
     const entryToDelete = filteredEntries[idx];
     if (entryToDelete.id) {
-      await fetch(`https://caltrack-k6yb.vercel.app/api/entry/${entryToDelete.id}`, { method: 'DELETE', credentials: 'include' });
+      await fetch(`/api/entry/${entryToDelete.id}`, { method: 'DELETE', credentials: 'include' });
       // Refetch entries
-      const entriesRes = await fetch('https://caltrack-k6yb.vercel.app/api/entries', { credentials: 'include' });
+      const entriesRes = await fetch('/api/entries', { credentials: 'include' });
       const data = await entriesRes.json();
       setEntries(data);
     } else {
@@ -132,14 +132,14 @@ function App() {
       // Update entry in backend if it has an id
       const entryToUpdate = filteredEntries[editIndex];
       if (entryToUpdate.id) {
-        await fetch(`https://caltrack-8mwo.onrender.com/api/entry/${entryToUpdate.id}`, {
+        await fetch(`/api/entry/${entryToUpdate.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify(entry)
         });
         // Refetch entries
-        const entriesRes = await fetch('https://caltrack-8mwo.onrender.com/api/entries', { credentials: 'include' });
+        const entriesRes = await fetch('/api/entries', { credentials: 'include' });
         const data = await entriesRes.json();
         setEntries(data);
       } else {
@@ -245,7 +245,7 @@ function App() {
 
     // Try to save to backend, replace temp entry with saved response when available
     try {
-      const res = await fetch('https://caltrack-8mwo.onrender.com/api/entry', {
+      const res = await fetch('/api/entry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -258,7 +258,7 @@ function App() {
         setEntries(prev => prev.map(e => e.tempId === tempId ? savedEntry : e));
         // Then refresh full list from backend to ensure UI matches DB
         try {
-          const entriesRes = await fetch('https://caltrack-8mwo.onrender.com/api/entries', { credentials: 'include' });
+          const entriesRes = await fetch('/api/entries', { credentials: 'include' });
           const data = await entriesRes.json();
           if (Array.isArray(data)) setEntries(data);
           // refresh recent meals so the Recent modal shows newly added meals
@@ -303,7 +303,7 @@ function App() {
   // Fetch entries for logged-in user
   useEffect(() => {
     if (!user) return;
-    fetch('https://caltrack-8mwo.onrender.com/api/entries', { credentials: 'include' })
+    fetch('/api/entries', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (Array.isArray(data)) setEntries(data);
@@ -321,7 +321,7 @@ function App() {
   // Fetch favorites for logged-in user
   useEffect(() => {
     if (!user) return;
-    fetch('https://caltrack-8mwo.onrender.com/api/favorites', { credentials: 'include' })
+    fetch('/api/favorites', { credentials: 'include' })
       .then(r => r.json())
       .then(d => Array.isArray(d) ? setFavorites(d) : setFavorites([]))
       .catch(() => setFavorites([]));
@@ -329,7 +329,7 @@ function App() {
 
   async function fetchRecent(limit = 10) {
     try {
-      const res = await fetch(`https://caltrack-8mwo.onrender.com/api/recent?limit=${limit}`, { credentials: 'include' });
+      const res = await fetch(`/api/recent?limit=${limit}`, { credentials: 'include' });
       const data = await res.json();
       setRecentMeals(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -339,11 +339,11 @@ function App() {
 
   async function addFavoriteFromEntry(entryObj) {
     try {
-      await fetch('https://caltrack-8mwo.onrender.com/api/favorites', {
+      await fetch('/api/favorites', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ name: entryObj.name, calories: entryObj.calories, protein: entryObj.protein, carbs: entryObj.carbs, fat: entryObj.fat })
       });
-      const res = await fetch('https://caltrack-8mwo.onrender.com/api/favorites', { credentials: 'include' });
+      const res = await fetch('/api/favorites', { credentials: 'include' });
       const data = await res.json();
       setFavorites(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -354,12 +354,12 @@ function App() {
   async function addMealFromTemplate(template) {
     try {
       const newEntry = { ...template, date: selectedDate };
-      const res = await fetch('https://caltrack-8mwo.onrender.com/api/entry', {
+      const res = await fetch('/api/entry', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(newEntry)
       });
       if (res.ok) {
         // refresh entries
-        const entriesRes = await fetch('https://caltrack-8mwo.onrender.com/api/entries', { credentials: 'include' });
+        const entriesRes = await fetch('/api/entries', { credentials: 'include' });
         const data = await entriesRes.json();
         if (Array.isArray(data)) setEntries(data);
       }
@@ -370,8 +370,8 @@ function App() {
 
   async function removeFavorite(id) {
     try {
-      await fetch(`https://caltrack-8mwo.onrender.com/api/favorites/${id}`, { method: 'DELETE', credentials: 'include' });
-      const res = await fetch('https://caltrack-8mwo.onrender.com/api/favorites', { credentials: 'include' });
+      await fetch(`/api/favorites/${id}`, { method: 'DELETE', credentials: 'include' });
+      const res = await fetch('/api/favorites', { credentials: 'include' });
       const data = await res.json();
       setFavorites(Array.isArray(data) ? data : []);
     } catch (err) {

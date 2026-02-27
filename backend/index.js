@@ -58,20 +58,8 @@ const Entry = mongoose.model('Entry', EntrySchema);
 // DB setup
 const db = new Low(new JSONFile(path.join(process.cwd(), 'db.json')), { users: [], entries: [], favorites: [], calorieLimit: {}, });
 
-const allowedOrigins = [
-  'http://localhost:3000',
-  'https://yeoldawesome.github.io',
-  'https://caltrack-k6yb.vercel.app',
-  'https://caltrack-k6yb-6m4hmnc5t-yeoldawesomes-projects.vercel.app'
-];
 app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, origin);
-    }
-    return callback(new Error('Not allowed by CORS'));
-  },
+  origin: true,
   credentials: true
 }));
 app.use(bodyParser.json());
@@ -130,9 +118,16 @@ app.post('/auth/logout', (req, res) => {
 
 // Get current user
 app.get('/auth/user', async (req, res) => {
-  const user = await User.findById(req.session.userId);
-  if (!user) return res.json({ user: null });
-  res.json({ user: { id: user._id, email: user.email } });
+  if (!req.session || !req.session.userId) {
+    return res.json({ user: null });
+  }
+  try {
+    const user = await User.findById(req.session.userId);
+    if (!user) return res.json({ user: null });
+    res.json({ user: { id: user._id, email: user.email } });
+  } catch (err) {
+    res.json({ user: null });
+  }
 });
 
 // Save entry (per user)
