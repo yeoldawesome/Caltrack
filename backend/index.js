@@ -1,15 +1,21 @@
 import dotenv from 'dotenv';
 dotenv.config();
-
-app.use(cors());
-app.use(bodyParser.json());
-
 import express from 'express';
 import bodyParser from 'body-parser';
 import mongoose from 'mongoose';
 import cors from 'cors';
+import session from 'express-session';
+import connectSqlite3 from 'connect-sqlite3';
+const SQLiteStore = connectSqlite3(session);
+import { Low } from 'lowdb';
+import { JSONFile } from 'lowdb/node';
+import path from 'path';
+import bcrypt from 'bcrypt';
+
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 4000;
+app.use(cors());
+app.use(bodyParser.json());
 mongoose.connect('mongodb://localhost:27017/caltrack', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -55,9 +61,6 @@ const EntrySchema = new mongoose.Schema({ userId: mongoose.Schema.Types.ObjectId
 const User = mongoose.model('User', UserSchema);
 const Entry = mongoose.model('Entry', EntrySchema);
 
-const app = express();
-app.set('trust proxy', 1);
-const PORT = process.env.PORT || 4000;
 
 // DB setup
 const db = new Low(new JSONFile(path.join(process.cwd(), 'db.json')), { users: [], entries: [], favorites: [], calorieLimit: {}, });
