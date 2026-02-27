@@ -52,7 +52,19 @@ const Settings = ({ onClose, settings, setSettings, user, handleLogout }) => {
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: '#000a', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: '#23272b', borderRadius: 16, padding: 24, minWidth: 320, position: 'relative' }}>
+      <div style={{
+        background: '#23272b',
+        borderRadius: 16,
+        padding: 24,
+        minWidth: 320,
+        maxWidth: '95vw',
+        width: '100%',
+        position: 'relative',
+        boxSizing: 'border-box',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+      }}>
         <button onClick={onClose} style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: 'none', color: '#aaa', fontSize: 22, cursor: 'pointer' }}>&times;</button>
         <h3 style={{ color: '#4fd1c5', marginBottom: 12 }}>Settings</h3>
         {user && (

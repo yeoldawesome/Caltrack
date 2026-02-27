@@ -36,7 +36,7 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '10mb' }));
 app.use(session({
   secret: 'caltrack_secret',
   resave: false,
@@ -54,7 +54,12 @@ mongoose.connect(mongoUri)
   .catch(err => console.error('MongoDB connection error:', err));
 
 // Schemas
-const UserSchema = new mongoose.Schema({ email: String, password: String });
+const UserSchema = new mongoose.Schema({
+  email: { type: String, unique: true, sparse: true },
+  username: { type: String, unique: true, sparse: true },
+  password: String,
+  profilePic: { type: String, default: '' } // URL or base64
+});
 const EntrySchema = new mongoose.Schema({
   userId: mongoose.Schema.Types.ObjectId,
   date: String,
@@ -83,29 +88,37 @@ app.get('/', (req, res) => {
   res.json({ message: 'Caltrack backend running!' });
 });
 
-// Signup
+// Signup (username or email required)
 app.post('/auth/signup', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-  const existing = await User.findOne({ email });
-  if (existing) return res.status(400).json({ error: 'Email already registered' });
+  const { email, username, password, profilePic } = req.body;
+  if ((!email && !username) || !password) return res.status(400).json({ error: 'Username or email and password required' });
+  if (email) {
+    const existingEmail = await User.findOne({ email });
+    if (existingEmail) return res.status(400).json({ error: 'Email already registered' });
+  }
+  if (username) {
+    const existingUser = await User.findOne({ username });
+    if (existingUser) return res.status(400).json({ error: 'Username already taken' });
+  }
   const hash = await bcrypt.hash(password, 10);
-  const user = new User({ email, password: hash });
+  const user = new User({ email, username, password: hash, profilePic });
   await user.save();
   req.session.userId = user._id;
-  res.json({ user: { id: user._id, email: user.email } });
+  res.json({ user: { id: user._id, email: user.email, username: user.username, profilePic: user.profilePic } });
 });
 
-// Login
+// Login (by email or username)
 app.post('/auth/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-  const user = await User.findOne({ email });
+  const { email, username, password } = req.body;
+  if ((!email && !username) || !password) return res.status(400).json({ error: 'Username/email and password required' });
+  const user = email
+    ? await User.findOne({ email })
+    : await User.findOne({ username });
   if (!user) return res.status(400).json({ error: 'Invalid credentials' });
   const match = await bcrypt.compare(password, user.password);
   if (!match) return res.status(400).json({ error: 'Invalid credentials' });
   req.session.userId = user._id;
-  res.json({ user: { id: user._id, email: user.email } });
+  res.json({ user: { id: user._id, email: user.email, username: user.username, profilePic: user.profilePic } });
 });
 
 // Logout
@@ -123,11 +136,60 @@ app.get('/auth/user', async (req, res) => {
   try {
     const user = await User.findById(req.session.userId);
     if (!user) return res.json({ user: null });
-    res.json({ user: { id: user._id, email: user.email } });
+    res.json({ user: { id: user._id, email: user.email, username: user.username, profilePic: user.profilePic } });
   } catch (err) {
     res.json({ user: null });
   }
 });
+// Update username
+app.post('/auth/update-username', ensureAuth, async (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: 'Username required' });
+  const existing = await User.findOne({ username });
+  if (existing && String(existing._id) !== String(req.session.userId)) {
+    return res.status(400).json({ error: 'Username already taken' });
+  }
+  const user = await User.findByIdAndUpdate(req.session.userId, { username }, { new: true });
+  res.json({ success: true, username: user.username });
+});
+
+// Update password
+app.post('/auth/update-password', ensureAuth, async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+  if (!oldPassword || !newPassword) return res.status(400).json({ error: 'Both old and new password required' });
+  const user = await User.findById(req.session.userId);
+  if (!user) return res.status(400).json({ error: 'User not found' });
+  const match = await bcrypt.compare(oldPassword, user.password);
+  if (!match) return res.status(400).json({ error: 'Old password incorrect' });
+  user.password = await bcrypt.hash(newPassword, 10);
+  await user.save();
+  res.json({ success: true });
+});
+
+// Update profile picture
+app.post('/auth/update-profile-pic', ensureAuth, async (req, res) => {
+  const { profilePic } = req.body;
+  if (!profilePic) return res.status(400).json({ error: 'Profile picture required' });
+  const user = await User.findByIdAndUpdate(req.session.userId, { profilePic }, { new: true });
+  res.json({ success: true, profilePic: user.profilePic });
+});
+// MIGRATION: Add username/profilePic to existing users if missing
+async function migrateUsers() {
+  const users = await User.find({});
+  for (const user of users) {
+    let changed = false;
+    if (!user.username) {
+      user.username = user.email ? user.email.split('@')[0] : `user${user._id}`;
+      changed = true;
+    }
+    if (user.profilePic === undefined) {
+      user.profilePic = '';
+      changed = true;
+    }
+    if (changed) await user.save();
+  }
+}
+migrateUsers();
 
 // Calorie limit endpoints
 app.get('/api/calorie-limit', ensureAuth, async (req, res) => {

@@ -6,6 +6,8 @@ import WeeklyCount from './WeeklyCount';
 import BarcodeScanner from './BarcodeScanner';
 import Tesseract from 'tesseract.js';
 import Settings from './Settings';
+import ProfileMenu from './ProfileMenu';
+import { ChangeUsernameModal, ChangePasswordModal, ChangeProfilePicModal } from './ProfileModals';
 
 const darkBg = '#181c20';
 const cardBg = '#23272b';
@@ -24,6 +26,14 @@ function App() {
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
+
+  // Profile menu modal state (must be here, not inside conditional)
+  const [showChangeUsername, setShowChangeUsername] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showChangeProfilePic, setShowChangeProfilePic] = useState(false);
+  // Profile modal state (must be here, not inside conditional)
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState('');
 
   // Check session on mount
   useEffect(() => {
@@ -585,27 +595,136 @@ function App() {
     );
   }
 
+
+
+
+  // Handlers for profile changes
+  async function handleChangeUsername(newUsername) {
+    setProfileLoading(true); setProfileError('');
+    try {
+      const res = await fetch(`${API_BASE}/auth/update-username`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ username: newUsername })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update username');
+      setUser(u => ({ ...u, username: data.username }));
+      setShowChangeUsername(false);
+    } catch (err) {
+      setProfileError(err.message);
+    }
+    setProfileLoading(false);
+  }
+  async function handleChangePassword(oldPassword, newPassword) {
+    setProfileLoading(true); setProfileError('');
+    try {
+      const res = await fetch(`${API_BASE}/auth/update-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ oldPassword, newPassword })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update password');
+      setShowChangePassword(false);
+    } catch (err) {
+      setProfileError(err.message);
+    }
+    setProfileLoading(false);
+  }
+  async function handleChangeProfilePic(pic) {
+    setProfileLoading(true); setProfileError('');
+    try {
+      const res = await fetch(`${API_BASE}/auth/update-profile-pic`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ profilePic: pic })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to update profile picture');
+      setUser(u => ({ ...u, profilePic: data.profilePic }));
+      setShowChangeProfilePic(false);
+    } catch (err) {
+      setProfileError(err.message);
+    }
+    setProfileLoading(false);
+  }
+
   // Always show tracker UI
-  return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: darkBg,
-        color: textColor,
-        fontFamily: 'system-ui, sans-serif',
-        padding: 0,
-        margin: 0,
-        position: 'relative',
-      }}
-    >
-      {/* Gear icon for settings */}
-      <button
-        onClick={() => setSettingsOpen(true)}
-        style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: '#aaa', fontSize: 28, cursor: 'pointer', zIndex: 4100 }}
-        aria-label="Settings"
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          width: '100vw',
+          background: darkBg,
+          color: textColor,
+          fontFamily: 'system-ui, sans-serif',
+          padding: 0,
+          margin: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
       >
-        <span role="img" aria-label="settings">&#9881;</span>
-      </button>
+        <div style={{
+          width: '100%',
+          maxWidth: 520,
+          minWidth: 0,
+          position: 'relative',
+          margin: '0 auto',
+          boxSizing: 'border-box',
+        }}>
+          {/* Profile pic and username menu */}
+          {user && (
+            <>
+              <ProfileMenu
+                user={user}
+                onLogout={handleLogout}
+                onChangeUsername={() => { setProfileError(''); setShowChangeUsername(true); }}
+                onChangePassword={() => { setProfileError(''); setShowChangePassword(true); }}
+                onChangeProfilePic={() => { setProfileError(''); setShowChangeProfilePic(true); }}
+                containerStyle={{ position: 'absolute', top: 16, left: 16, zIndex: 4200 }}
+              />
+              {showChangeUsername && (
+                <ChangeUsernameModal
+                  onClose={() => setShowChangeUsername(false)}
+                  onSubmit={handleChangeUsername}
+                  loading={profileLoading}
+                  error={profileError}
+                  currentUsername={user.username}
+                />
+              )}
+              {showChangePassword && (
+                <ChangePasswordModal
+                  onClose={() => setShowChangePassword(false)}
+                  onSubmit={handleChangePassword}
+                  loading={profileLoading}
+                  error={profileError}
+                />
+              )}
+              {showChangeProfilePic && (
+                <ChangeProfilePicModal
+                  onClose={() => setShowChangeProfilePic(false)}
+                  onSubmit={handleChangeProfilePic}
+                  loading={profileLoading}
+                  error={profileError}
+                  currentPic={user.profilePic}
+                />
+              )}
+            </>
+          )}
+          {/* Gear icon for settings */}
+          <button
+            onClick={() => setSettingsOpen(true)}
+            style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: '#aaa', fontSize: 28, cursor: 'pointer', zIndex: 4100 }}
+            aria-label="Settings"
+          >
+            <span role="img" aria-label="settings">&#9881;</span>
+          </button>
       {/* User info and logout moved to Settings modal */}
       {/* Settings modal */}
       {settingsOpen && (
@@ -620,8 +739,11 @@ function App() {
       <div
         style={{
           maxWidth: 480,
+          width: '100%',
           margin: '0 auto',
-          padding: 24,
+          padding: '24px 8px',
+          boxSizing: 'border-box',
+          transition: 'margin-left 0.2s',
         }}
       >
         {/* Barcode modal trigger moved to Upload box; top button removed */}
@@ -746,7 +868,7 @@ function App() {
           </div>
         )}
         {barcodeError && <div style={{ color: '#ef4444', marginBottom: 8 }}>{barcodeError}</div>}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16, marginLeft: 140 }}>
           <button
             style={{
               background: accent,
@@ -1208,7 +1330,7 @@ function App() {
               }}
             >
               {editIndex === i ? (
-                <>
+                <React.Fragment>
                   <input
                     style={{ fontWeight: 500, fontSize: 16, marginBottom: 4, background: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: 4, padding: '2px 8px' }}
                     value={entry.name}
@@ -1252,9 +1374,9 @@ function App() {
                     <button onClick={handleSaveEntry} style={{ background: accent, color: '#fff', border: 'none', borderRadius: 4, padding: '2px 12px', cursor: 'pointer', fontSize: 13 }}>Save</button>
                     <button onClick={() => { setEditIndex(null); setEntry({ name: '', calories: '', protein: '', carbs: '', fat: '' }); }} style={{ background: '#aaa', color: '#222', border: 'none', borderRadius: 4, padding: '2px 12px', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
                   </div>
-                </>
+                </React.Fragment>
               ) : (
-                <>
+                <React.Fragment>
                   <span style={{ fontWeight: 500, fontSize: 16 }}>{e.name}</span>
                   <span style={{ fontSize: 14, color: '#fbbf24' }}>{e.calories} kcal</span>
                   <span style={{ fontSize: 13, color: '#aaa', marginTop: 2 }}>
@@ -1276,13 +1398,15 @@ function App() {
                     <button onClick={() => handleEditEntry(i)} style={{ background: accent, color: '#fff', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 13 }}>Edit</button>
                     <button onClick={() => handleDeleteEntry(i)} style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 13 }}>Delete</button>
                   </div>
-                </>
+                </React.Fragment>
               )}
             </li>
           ))}
         </ul>
+
       </div>
     </div>
+  </div>
   );
 }
 

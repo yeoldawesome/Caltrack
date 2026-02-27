@@ -6,7 +6,12 @@ image upload serving options DONE
 better cal input DONE
 save foods DONE
 rename mongo db
+cal limit per week thingy DONE
+Username and profile pic DONE
 Fix Favorite not working DONE
+change password DONE
+
 Live Hosting
 Scan Barcode work on iphone
-cal limit per week thingy DONE
+forgot password 
+Friends stuff
