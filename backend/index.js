@@ -1,11 +1,5 @@
 import dotenv from 'dotenv';
 dotenv.config();
-import express from 'express';
-import bodyParser from 'body-parser';
-import mongoose from 'mongoose';
-import cors from 'cors';
-const app = express();
-const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -42,8 +36,6 @@ app.post('/sessions', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-import dotenv from 'dotenv';
-dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
