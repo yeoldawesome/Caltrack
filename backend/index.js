@@ -215,7 +215,7 @@ app.delete('/api/favorites/:id', ensureAuth, async (req, res) => {
   if (result.deletedCount === 0) return res.status(404).json({ error: 'Favorite not found' });
   res.json({ success: true });
 });
-
+//A
 
 // Get recent entries for the logged-in user
 app.get('/api/recent', ensureAuth, async (req, res) => {
