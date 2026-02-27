@@ -1,0 +1,20 @@
+# Node modules
+node_modules/
+
+# dotenv environment variables
+.env
+
+# LowDB database
+backend/db.json
+
+# Logs
+*.log
+
+# Mac system files
+.DS_Store
+
+# Windows system files
+Thumbs.db
+
+# VSCode settings
+.vscode/
