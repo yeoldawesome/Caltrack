@@ -6,3 +6,4 @@ image upload serving options DONE
 cal limit per week thingy
 better cal input DONE
 save foods DONE
+rename mongo db
