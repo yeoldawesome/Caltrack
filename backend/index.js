@@ -13,7 +13,14 @@ const PORT = process.env.PORT || 4000;
 // DB setup
 const db = new Low(new JSONFile(path.join(process.cwd(), 'db.json')), { users: [], entries: [], favorites: [], calorieLimit: {}, });
 
-app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://yeoldawesome.github.io'
+];
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true
+}));
 app.use(bodyParser.json());
 app.use(session({ secret: 'caltrack_secret', resave: false, saveUninitialized: false }));
 
