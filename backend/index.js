@@ -33,10 +33,17 @@ const db = new Low(new JSONFile(path.join(process.cwd(), 'db.json')), { users: [
 
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://yeoldawesome.github.io'
+  'https://yeoldawesome.github.io',
+  'https://caltrack-8mwo.onrender.com'
 ];
 app.use(cors({
-  origin: allowedOrigins,
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 app.use(bodyParser.json());
