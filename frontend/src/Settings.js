@@ -1,36 +1,48 @@
 import React, { useState } from 'react';
 
 const Settings = ({ onClose, settings, setSettings, user, handleLogout }) => {
-  const [localSettings, setLocalSettings] = useState(settings);
+  const [localSettings, setLocalSettings] = useState({ ...settings, calorieMode: settings.calorieMode || 'daily' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   // Fetch calorie limit for logged-in user
   React.useEffect(() => {
+    // Load calorie limit and calorieMode from backend or localStorage
     fetch((process.env.REACT_APP_API_URL || 'http://localhost:4000') + '/api/calorie-limit', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
-        setLocalSettings({ dailyLimit: data.calorieLimit });
+        let mode = 'daily';
+        try {
+          mode = (data && data.calorieMode) || localStorage.getItem('calorieMode') || 'daily';
+        } catch {}
+        setLocalSettings({ dailyLimit: data.calorieLimit, calorieMode: mode });
       });
   }, []);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setLocalSettings({ ...localSettings, [name]: value });
+    const { name, value, type, checked } = e.target;
+    if (type === 'checkbox') {
+      setLocalSettings({ ...localSettings, [name]: checked });
+    } else {
+      setLocalSettings({ ...localSettings, [name]: value });
+    }
   };
 
   const handleSave = async () => {
     setSaving(true);
     setError('');
     try {
+      // Save both calorieLimit and calorieMode
       const res = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:4000') + '/api/calorie-limit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ calorieLimit: localSettings.dailyLimit })
+        body: JSON.stringify({ calorieLimit: localSettings.dailyLimit, calorieMode: localSettings.calorieMode })
       });
       if (!res.ok) throw new Error('Failed to save');
       setSettings(localSettings);
+      // Also persist in localStorage for fallback
+      try { localStorage.setItem('calorieMode', localSettings.calorieMode); } catch {}
       onClose();
     } catch (err) {
       setError('Failed to save calorie limit');
@@ -49,6 +61,19 @@ const Settings = ({ onClose, settings, setSettings, user, handleLogout }) => {
             <button onClick={handleLogout} style={{ marginLeft: 12, background: 'none', border: 'none', color: '#ef4444', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>Logout</button>
           </div>
         )}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ color: '#f5f6fa', fontWeight: 500, marginRight: 8 }}>Calorie Count Mode:</label>
+          <select
+            name="calorieMode"
+            value={localSettings.calorieMode || 'daily'}
+            onChange={handleChange}
+            style={{ background: '#23272b', color: '#f5f6fa', border: '1px solid #353b41', borderRadius: 6, padding: '4px 8px', marginLeft: 8 }}
+            disabled={saving}
+          >
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+          </select>
+        </div>
         <div style={{ marginBottom: 16 }}>
           <label style={{ color: '#f5f6fa', fontWeight: 500, marginRight: 8 }}>Daily Calorie Limit:</label>
           <input

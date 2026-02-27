@@ -77,12 +77,12 @@ function App() {
   }
   // Settings modal state
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState({ dailyLimit: 2000 });
+  const [settings, setSettings] = useState({ dailyLimit: 2000, calorieMode: 'daily' });
 
   // Wrapper to update settings and keep dailyLimit in sync
   const updateSettings = (newSettings) => {
     const parsedLimit = newSettings && newSettings.dailyLimit !== undefined ? Number(newSettings.dailyLimit) : settings.dailyLimit;
-    const merged = { ...newSettings, dailyLimit: parsedLimit };
+    const merged = { ...settings, ...newSettings, dailyLimit: parsedLimit };
     setSettings(merged);
     setDailyLimit(parsedLimit);
   };
@@ -97,7 +97,11 @@ function App() {
       .then(res => res.json())
       .then(data => {
         const limit = (data && (data.calorieLimit || data.dailyLimit)) || 2000;
-        setSettings({ dailyLimit: limit });
+        let mode = 'daily';
+        try {
+          mode = (data && data.calorieMode) || localStorage.getItem('calorieMode') || 'daily';
+        } catch {}
+        setSettings({ dailyLimit: limit, calorieMode: mode });
         setDailyLimit(limit);
       })
       .catch(() => {
@@ -898,7 +902,7 @@ function App() {
           >
             <div style={{ position: 'relative', background: cardBg, borderRadius: 16, padding: 24, minWidth: 360 }} onClick={e => e.stopPropagation()}>
               <button onClick={() => setWeeklyOpen(false)} style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: 'none', color: '#aaa', fontSize: 22, cursor: 'pointer' }}>&times;</button>
-              <WeeklyCount entries={entries} dailyLimit={dailyLimit} />
+              <WeeklyCount entries={entries} dailyLimit={dailyLimit} calorieMode={settings.calorieMode || 'daily'} />
             </div>
           </div>
         )}
@@ -920,14 +924,68 @@ function App() {
           }}
         >
           <div>
-            <label style={{ fontWeight: 500 }}>
-              Daily Calorie Limit:{' '}
-              <span style={{ marginLeft: 8, color: textColor, fontWeight: 600 }}>{dailyLimit}</span>
-            </label>
+            {settings.calorieMode === 'weekly' ? (
+              <>
+                <div style={{ fontWeight: 500 }}>Avg left per day (rest of week):
+                  <span style={{ marginLeft: 8, color: textColor, fontWeight: 600 }}>
+                    {(() => {
+                      // Calculate weekly remaining and avg left per day (rest of week)
+                      const today = new Date();
+                      const todayUTC = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+                      const day = todayUTC.getUTCDay();
+                      const diff = todayUTC.getUTCDate() - day + (day === 0 ? -6 : 1);
+                      const startOfWeek = new Date(Date.UTC(todayUTC.getUTCFullYear(), todayUTC.getUTCMonth(), diff));
+                      const weekDays = [];
+                      for (let i = 0; i < 7; ++i) {
+                        const d = new Date(startOfWeek);
+                        d.setDate(d.getDate() + i);
+                        weekDays.push(d.toISOString().slice(0, 10));
+                      }
+                      const weekTotal = entries.filter(e => weekDays.includes((e.date || '').slice(0, 10))).reduce((sum, e) => sum + Number(e.calories || 0), 0);
+                      const weekLimit = dailyLimit * 7;
+                      let todayIdx = todayUTC.getUTCDay();
+                      todayIdx = (todayIdx + 6) % 7;
+                      const daysLeft = 6 - todayIdx;
+                      const weekRemaining = weekLimit - weekTotal;
+                      const calsLeftPerDay = daysLeft > 0 ? Math.floor(weekRemaining / (daysLeft + 1)) : weekRemaining;
+                      return calsLeftPerDay;
+                    })()}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <label style={{ fontWeight: 500 }}>
+                Daily Calorie Limit:{' '}
+                <span style={{ marginLeft: 8, color: textColor, fontWeight: 600 }}>{dailyLimit}</span>
+              </label>
+            )}
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 12, color: '#aaa' }}>Calories Remaining</div>
-            <div style={{ fontWeight: 700, color: accent, fontSize: 18 }}>{Math.max(0, Math.round(dailyLimit - total.calories))} kcal</div>
+            <div style={{ fontSize: 12, color: '#aaa' }}>{settings.calorieMode === 'weekly' ? 'Weekly Calories Remaining' : 'Calories Remaining'}</div>
+            <div style={{ fontWeight: 700, color: accent, fontSize: 18 }}>
+              {settings.calorieMode === 'weekly'
+                ? (() => {
+                    // Calculate weekly remaining
+                    const today = new Date();
+                    const todayUTC = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+                    // Get start of week (Monday)
+                    const day = todayUTC.getUTCDay();
+                    const diff = todayUTC.getUTCDate() - day + (day === 0 ? -6 : 1);
+                    const startOfWeek = new Date(Date.UTC(todayUTC.getUTCFullYear(), todayUTC.getUTCMonth(), diff));
+                    // Get all days in this week (YYYY-MM-DD)
+                    const weekDays = [];
+                    for (let i = 0; i < 7; ++i) {
+                      const d = new Date(startOfWeek);
+                      d.setDate(d.getDate() + i);
+                      weekDays.push(d.toISOString().slice(0, 10));
+                    }
+                    // Sum calories for this week
+                    const weekTotal = entries.filter(e => weekDays.includes((e.date || '').slice(0, 10))).reduce((sum, e) => sum + Number(e.calories || 0), 0);
+                    const weekLimit = dailyLimit * 7;
+                    return Math.max(0, weekLimit - weekTotal) + ' kcal';
+                  })()
+                : Math.max(0, Math.round(dailyLimit - total.calories)) + ' kcal'}
+            </div>
           </div>
         </div>
         {/* Upload */}

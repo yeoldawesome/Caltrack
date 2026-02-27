@@ -15,7 +15,7 @@ function getEndOfWeek(date) {
   return new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate() + 6));
 }
 
-export default function WeeklyCount({ entries, dailyLimit }) {
+export default function WeeklyCount({ entries, dailyLimit, calorieMode }) {
 
   const today = new Date();
   const todayUTC = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
