@@ -42,17 +42,6 @@ app.post('/sessions', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-import express from 'express';
-import cors from 'cors';
-import bodyParser from 'body-parser';
-import session from 'express-session';
-import connectSqlite3 from 'connect-sqlite3';
-const SQLiteStore = connectSqlite3(session);
-import { Low } from 'lowdb';
-import { JSONFile } from 'lowdb/node';
-import path from 'path';
-import bcrypt from 'bcrypt';
-import mongoose from 'mongoose';
 
 // MongoDB Atlas connection
 const mongoUri = "mongodb+srv://dnlonglett_db_user:45JY8GtL8ujhNY71@caltracker.6y4aqcw.mongodb.net/?appName=CalTracker";
