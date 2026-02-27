@@ -13,7 +13,7 @@ import bcrypt from 'bcrypt';
 import mongoose from 'mongoose';
 
 // MongoDB Atlas connection
-const mongoUri = process.env.MONGO_URI;
+const mongoUri = "mongodb+srv://dnlonglett_db_user:45JY8GtL8ujhNY71@caltracker.6y4aqcw.mongodb.net/?appName=CalTracker";
 mongoose.connect(mongoUri)
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.error('MongoDB connection error:', err));
