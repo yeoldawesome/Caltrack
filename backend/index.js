@@ -18,6 +18,8 @@ const PORT = process.env.PORT || 4000;
 
 // DB setup
 const db = new Low(new JSONFile(path.join(process.cwd(), 'db.json')), { users: [], entries: [], favorites: [], calorieLimit: {}, });
+// Trust proxy for correct secure cookie handling on Render
+app.set('trust proxy', 1);
 
 const allowedOrigins = [
   'http://localhost:3000',
