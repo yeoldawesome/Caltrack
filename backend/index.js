@@ -16,7 +16,6 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(bodyParser.json());
-mongoose.connect('mongodb://localhost:27017/caltrack');
 const sessionSchema = new mongoose.Schema({
   date: String,
   calories: Number,
