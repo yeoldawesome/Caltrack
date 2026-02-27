@@ -45,9 +45,6 @@ app.post('/sessions', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
 
 // MongoDB Atlas connection
 const mongoUri = "mongodb+srv://dnlonglett_db_user:45JY8GtL8ujhNY71@caltracker.6y4aqcw.mongodb.net/?appName=CalTracker";
