@@ -1,21 +1,77 @@
+import dotenv from 'dotenv';
+dotenv.config();
 import express from 'express';
-import cors from 'cors';
 import bodyParser from 'body-parser';
+import mongoose from 'mongoose';
+import cors from 'cors';
 import session from 'express-session';
+import connectSqlite3 from 'connect-sqlite3';
+const SQLiteStore = connectSqlite3(session);
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 import path from 'path';
 import bcrypt from 'bcrypt';
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 5000;
+app.use(cors());
+app.use(bodyParser.json());
+const sessionSchema = new mongoose.Schema({
+  date: String,
+  calories: Number,
+  barcode: String,
+});
+const Session = mongoose.model('Session', sessionSchema);
+
+app.get('/sessions', async (req, res) => {
+  try {
+    const sessions = await Session.find();
+    res.json(sessions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.post('/sessions', async (req, res) => {
+  const { date, calories, barcode } = req.body;
+  try {
+    const newSession = new Session({ date, calories, barcode });
+    await newSession.save();
+    res.status(201).json(newSession);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// MongoDB Atlas connection
+const mongoUri = "mongodb+srv://dnlonglett_db_user:45JY8GtL8ujhNY71@caltracker.6y4aqcw.mongodb.net/?appName=CalTracker";
+mongoose.connect(mongoUri)
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
+// Define schemas
+const UserSchema = new mongoose.Schema({ email: String, password: String });
+const EntrySchema = new mongoose.Schema({ userId: mongoose.Schema.Types.ObjectId, date: String, calories: Number, food: String });
+const User = mongoose.model('User', UserSchema);
+const Entry = mongoose.model('Entry', EntrySchema);
+
 
 // DB setup
 const db = new Low(new JSONFile(path.join(process.cwd(), 'db.json')), { users: [], entries: [], favorites: [], calorieLimit: {}, });
 
-app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
 app.use(bodyParser.json());
-app.use(session({ secret: 'caltrack_secret', resave: false, saveUninitialized: false }));
+app.use(session({
+  secret: 'caltrack_secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'none'
+  }
+}));
 
 // Auth helpers
 function ensureAuth(req, res, next) {
@@ -32,29 +88,25 @@ app.get('/', (req, res) => {
 app.post('/auth/signup', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-  await db.read();
-  if (db.data.users.find(u => u.email === email)) {
-    return res.status(400).json({ error: 'Email already registered' });
-  }
+  const existing = await User.findOne({ email });
+  if (existing) return res.status(400).json({ error: 'Email already registered' });
   const hash = await bcrypt.hash(password, 10);
-  const user = { id: db.data.users.length + 1, email, password: hash };
-  db.data.users.push(user);
-  await db.write();
-  req.session.userId = user.id;
-  res.json({ user: { id: user.id, email: user.email } });
+  const user = new User({ email, password: hash });
+  await user.save();
+  req.session.userId = user._id;
+  res.json({ user: { id: user._id, email: user.email } });
 });
 
 // Login
 app.post('/auth/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-  await db.read();
-  const user = db.data.users.find(u => u.email === email);
+  const user = await User.findOne({ email });
   if (!user) return res.status(400).json({ error: 'Invalid credentials' });
   const match = await bcrypt.compare(password, user.password);
   if (!match) return res.status(400).json({ error: 'Invalid credentials' });
-  req.session.userId = user.id;
-  res.json({ user: { id: user.id, email: user.email } });
+  req.session.userId = user._id;
+  res.json({ user: { id: user._id, email: user.email } });
 });
 
 // Logout
@@ -66,23 +118,25 @@ app.post('/auth/logout', (req, res) => {
 
 // Get current user
 app.get('/auth/user', async (req, res) => {
-  await db.read();
-  const user = db.data.users.find(u => u.id === req.session.userId);
-  if (!user) return res.json({ user: null });
-  res.json({ user: { id: user.id, email: user.email } });
+  if (!req.session || !req.session.userId) {
+    return res.json({ user: null });
+  }
+  try {
+    const user = await User.findById(req.session.userId);
+    if (!user) return res.json({ user: null });
+    res.json({ user: { id: user._id, email: user.email } });
+  } catch (err) {
+    res.json({ user: null });
+  }
 });
 
 // Save entry (per user)
 app.post('/api/entry', ensureAuth, async (req, res) => {
-  await db.read();
   let entryDate = req.body.date;
   if (!entryDate) entryDate = new Date().toISOString();
-  let maxId = 0;
-  db.data.entries.forEach(e => { if (e.id && Number(e.id) > maxId) maxId = Number(e.id); });
-  const entry = { ...req.body, date: entryDate, id: maxId + 1, userId: req.session.userId };
-  db.data.entries.push(entry);
-  await db.write();
-  res.json({ success: true, id: entry.id });
+  const entry = new Entry({ ...req.body, date: entryDate, userId: req.session.userId });
+  await entry.save();
+  res.json({ success: true, id: entry._id });
 });
 
 // Get entries
@@ -125,8 +179,7 @@ app.delete('/api/entry/:id', async (req, res) => {
 
 // Get entries for current user
 app.get('/api/entries', ensureAuth, async (req, res) => {
-  await db.read();
-  const userEntries = (db.data.entries || []).filter(e => e.userId === req.session.userId);
+  const userEntries = await Entry.find({ userId: req.session.userId });
   res.json(userEntries);
 });
 
