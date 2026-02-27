@@ -9,6 +9,19 @@ import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 import path from 'path';
 import bcrypt from 'bcrypt';
+import mongoose from 'mongoose';
+
+// MongoDB Atlas connection
+const mongoUri = 'mongodb+srv://dnlonglett_db_user:45JY8GtL8ujhNY71@caltracker.6y4aqcw.mongodb.net/?appName=CalTracker';
+mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
+// Define schemas
+const UserSchema = new mongoose.Schema({ email: String, password: String });
+const EntrySchema = new mongoose.Schema({ userId: mongoose.Schema.Types.ObjectId, date: String, calories: Number, food: String });
+const User = mongoose.model('User', UserSchema);
+const Entry = mongoose.model('Entry', EntrySchema);
 
 const app = express();
 app.set('trust proxy', 1);
