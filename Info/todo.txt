@@ -8,3 +8,5 @@ better cal input DONE
 save foods DONE
 rename mongo db
 Fix Favorite not working DONE
+Live Hosting
+Scan Barcode work on iphone
