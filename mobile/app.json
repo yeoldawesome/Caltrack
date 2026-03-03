@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Caltrack",
+    "slug": "caltrack",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTabletMode": true,
+      "bundleIdentifier": "com.caltrack.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "We need camera access to scan food barcodes.",
+        "NSPhotoLibraryUsageDescription": "We need access to your photos to set a profile picture.",
+        "NSPhotoLibraryAddOnlyUsageDescription": "We need access to save photos."
+      }
+    },
+    "android": {
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "We need camera access to scan barcodes."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "For profile picture",
+          "cameraCameraPermission": "Camera access"
+        }
+      ]
+    ]
+  }
+}

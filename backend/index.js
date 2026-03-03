@@ -7,12 +7,18 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import session from 'express-session';
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'caltrack_jwt_secret';
 
 const allowedOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://10.26.52.151:3000',
-  process.env.FRONTEND_ORIGIN // for deployment, set this env var
+  'http://localhost:4000',
+  'http://127.0.0.1:4000',
+  process.env.FRONTEND_ORIGIN, // for deployment, set this env var
+  process.env.MOBILE_ORIGIN // for iOS app origin (wildcard or specific domain)
 ].filter(Boolean);
 
 const app = express();
@@ -80,8 +86,33 @@ const Favorite = mongoose.model('Favorite', FavoriteSchema);
 
 // Auth helpers
 function ensureAuth(req, res, next) {
-  if (req.session && req.session.userId) return next();
+  // Check session (web auth)
+  if (req.session && req.session.userId) {
+    return next();
+  }
+  
+  // Check JWT token (mobile auth)
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      req.userId = decoded.userId;
+      return next();
+    } catch (err) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+  }
+  
   res.status(401).json({ error: 'Not authenticated' });
+}
+
+// Helper to get user ID from session or JWT
+function getUserId(req) {
+  if (req.session && req.session.userId) {
+    return req.session.userId;
+  }
+  return req.userId;
 }
 
 // Routes
@@ -105,7 +136,14 @@ app.post('/auth/signup', async (req, res) => {
   const user = new User({ email, username, password: hash, profilePic });
   await user.save();
   req.session.userId = user._id;
-  res.json({ user: { id: user._id, email: user.email, username: user.username, profilePic: user.profilePic } });
+  
+  // Generate JWT token for mobile apps
+  const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
+  
+  res.json({ 
+    user: { id: user._id, email: user.email, username: user.username, profilePic: user.profilePic },
+    token // For mobile apps
+  });
 });
 
 // Login (by email or username)
@@ -119,7 +157,14 @@ app.post('/auth/login', async (req, res) => {
   const match = await bcrypt.compare(password, user.password);
   if (!match) return res.status(400).json({ error: 'Invalid credentials' });
   req.session.userId = user._id;
-  res.json({ user: { id: user._id, email: user.email, username: user.username, profilePic: user.profilePic } });
+  
+  // Generate JWT token for mobile apps
+  const token = jwt.sign({ userId: user._id }, JWT_SECRET, { expiresIn: '7d' });
+  
+  res.json({ 
+    user: { id: user._id, email: user.email, username: user.username, profilePic: user.profilePic },
+    token // For mobile apps
+  });
 });
 
 // Logout
@@ -146,11 +191,25 @@ app.get('/auth/user', async (req, res) => {
 app.post('/auth/update-username', ensureAuth, async (req, res) => {
   const { username } = req.body;
   if (!username) return res.status(400).json({ error: 'Username required' });
+  const userId = getUserId(req);
   const existing = await User.findOne({ username });
-  if (existing && String(existing._id) !== String(req.session.userId)) {
+  if (existing && String(existing._id) !== String(userId)) {
     return res.status(400).json({ error: 'Username already taken' });
   }
-  const user = await User.findByIdAndUpdate(req.session.userId, { username }, { new: true });
+  const user = await User.findByIdAndUpdate(userId, { username }, { new: true });
+  res.json({ success: true, username: user.username });
+});
+
+// Update username (mobile API endpoint)
+app.put('/api/profile/username', ensureAuth, async (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: 'Username required' });
+  const userId = getUserId(req);
+  const existing = await User.findOne({ username });
+  if (existing && String(existing._id) !== String(userId)) {
+    return res.status(400).json({ error: 'Username already taken' });
+  }
+  const user = await User.findByIdAndUpdate(userId, { username }, { new: true });
   res.json({ success: true, username: user.username });
 });
 
@@ -158,10 +217,25 @@ app.post('/auth/update-username', ensureAuth, async (req, res) => {
 app.post('/auth/update-password', ensureAuth, async (req, res) => {
   const { oldPassword, newPassword } = req.body;
   if (!oldPassword || !newPassword) return res.status(400).json({ error: 'Both old and new password required' });
-  const user = await User.findById(req.session.userId);
+  const userId = getUserId(req);
+  const user = await User.findById(userId);
   if (!user) return res.status(400).json({ error: 'User not found' });
   const match = await bcrypt.compare(oldPassword, user.password);
   if (!match) return res.status(400).json({ error: 'Old password incorrect' });
+  user.password = await bcrypt.hash(newPassword, 10);
+  await user.save();
+  res.json({ success: true });
+});
+
+// Update password (mobile API endpoint - uses currentPassword instead of oldPassword)
+app.put('/api/profile/password', ensureAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Both current and new password required' });
+  const userId = getUserId(req);
+  const user = await User.findById(userId);
+  if (!user) return res.status(400).json({ error: 'User not found' });
+  const match = await bcrypt.compare(currentPassword, user.password);
+  if (!match) return res.status(400).json({ error: 'Current password incorrect' });
   user.password = await bcrypt.hash(newPassword, 10);
   await user.save();
   res.json({ success: true });
@@ -171,7 +245,17 @@ app.post('/auth/update-password', ensureAuth, async (req, res) => {
 app.post('/auth/update-profile-pic', ensureAuth, async (req, res) => {
   const { profilePic } = req.body;
   if (!profilePic) return res.status(400).json({ error: 'Profile picture required' });
-  const user = await User.findByIdAndUpdate(req.session.userId, { profilePic }, { new: true });
+  const userId = getUserId(req);
+  const user = await User.findByIdAndUpdate(userId, { profilePic }, { new: true });
+  res.json({ success: true, profilePic: user.profilePic });
+});
+
+// Update profile picture (mobile API endpoint)
+app.put('/api/profile/picture', ensureAuth, async (req, res) => {
+  const { profilePic } = req.body;
+  if (!profilePic) return res.status(400).json({ error: 'Profile picture required' });
+  const userId = getUserId(req);
+  const user = await User.findByIdAndUpdate(userId, { profilePic }, { new: true });
   res.json({ success: true, profilePic: user.profilePic });
 });
 // MIGRATION: Add username/profilePic to existing users if missing
@@ -194,9 +278,10 @@ migrateUsers();
 
 // Calorie limit endpoints
 app.get('/api/calorie-limit', ensureAuth, async (req, res) => {
-  let limit = await CalorieLimit.findOne({ userId: req.session.userId });
+  const userId = getUserId(req);
+  let limit = await CalorieLimit.findOne({ userId });
   if (!limit) {
-    limit = new CalorieLimit({ userId: req.session.userId, calorieLimit: 2000 });
+    limit = new CalorieLimit({ userId, calorieLimit: 2000 });
     await limit.save();
   }
   res.json({ calorieLimit: limit.calorieLimit });
@@ -206,8 +291,9 @@ app.post('/api/calorie-limit', ensureAuth, async (req, res) => {
   if (!calorieLimit || isNaN(calorieLimit)) {
     return res.status(400).json({ error: 'Invalid calorie limit' });
   }
+  const userId = getUserId(req);
   let limit = await CalorieLimit.findOneAndUpdate(
-    { userId: req.session.userId },
+    { userId },
     { calorieLimit: Number(calorieLimit) },
     { new: true, upsert: true }
   );
@@ -216,7 +302,8 @@ app.post('/api/calorie-limit', ensureAuth, async (req, res) => {
 
 // Entries endpoints (CRUD)
 app.get('/api/entries', ensureAuth, async (req, res) => {
-  const userEntries = await Entry.find({ userId: req.session.userId });
+  const userId = getUserId(req);
+  const userEntries = await Entry.find({ userId });
   // Map backend fields to include name, protein, carbs, fat for frontend compatibility
   const mappedEntries = userEntries.map(e => ({
     ...e.toObject(),
@@ -227,12 +314,64 @@ app.get('/api/entries', ensureAuth, async (req, res) => {
   }));
   res.json(mappedEntries);
 });
+
+// Get entries for a specific date (mobile app endpoint)
+app.get('/api/entries/:date', ensureAuth, async (req, res) => {
+  const userId = getUserId(req);
+  const { date } = req.params;
+  const entries = await Entry.find({ userId, date });
+  res.json(entries);
+});
+
+// Get entries for a specific month (mobile app endpoint)
+app.get('/api/entries/month/:year/:month', ensureAuth, async (req, res) => {
+  const userId = getUserId(req);
+  const { year, month } = req.params;
+  
+  // Parse year and month
+  const y = parseInt(year, 10);
+  const m = parseInt(month, 10);
+  
+  // Create date range for the month
+  const startDate = new Date(y, m - 1, 1).toISOString().split('T')[0];
+  const endDate = new Date(y, m, 0).toISOString().split('T')[0];
+  
+  // Get entries within the month range
+  const entries = await Entry.find({
+    userId,
+    date: { $gte: startDate, $lte: endDate }
+  }).sort({ date: -1 });
+  
+  res.json(entries);
+});
+
+app.post('/api/entries', ensureAuth, async (req, res) => {
+  let { date, calories, food, protein, carbs, fat } = req.body;
+  if (!calories) return res.status(400).json({ error: 'Calories required' });
+  if (!date) date = new Date().toISOString().split('T')[0];
+  
+  const userId = getUserId(req);
+  const entry = new Entry({
+    userId,
+    date,
+    calories,
+    food: food || 'Food entry',
+    protein: protein ?? 0,
+    carbs: carbs ?? 0,
+    fat: fat ?? 0
+  });
+  await entry.save();
+  res.status(201).json(entry);
+});
+
 app.post('/api/entry', ensureAuth, async (req, res) => {
   let { date, calories, food, protein, carbs, fat } = req.body;
   if (!calories || !food) return res.status(400).json({ error: 'Missing fields' });
   if (!date) date = new Date().toISOString();
+  
+  const userId = getUserId(req);
   const entry = new Entry({
-    userId: req.session.userId,
+    userId,
     date,
     calories,
     food,
@@ -243,48 +382,55 @@ app.post('/api/entry', ensureAuth, async (req, res) => {
   await entry.save();
   res.status(201).json(entry);
 });
+
 app.put('/api/entry/:id', ensureAuth, async (req, res) => {
   const { id } = req.params;
+  const userId = getUserId(req);
   const entry = await Entry.findOneAndUpdate(
-    { _id: id, userId: req.session.userId },
+    { _id: id, userId },
     req.body,
     { new: true }
   );
   if (!entry) return res.status(404).json({ error: 'Entry not found' });
   res.json(entry);
 });
+
 app.delete('/api/entry/:id', ensureAuth, async (req, res) => {
   const { id } = req.params;
-  const result = await Entry.deleteOne({ _id: id, userId: req.session.userId });
+  const userId = getUserId(req);
+  const result = await Entry.deleteOne({ _id: id, userId });
   if (result.deletedCount === 0) return res.status(404).json({ error: 'Entry not found' });
   res.json({ success: true });
 });
 
 // Favorites endpoints (CRUD)
 app.get('/api/favorites', ensureAuth, async (req, res) => {
-  const favs = await Favorite.find({ userId: req.session.userId });
+  const userId = getUserId(req);
+  const favs = await Favorite.find({ userId });
   res.json(favs);
 });
 app.post('/api/favorites', ensureAuth, async (req, res) => {
   const { food, details } = req.body;
   if (!food) return res.status(400).json({ error: 'Missing food' });
-  const fav = new Favorite({ userId: req.session.userId, food, details });
+  const userId = getUserId(req);
+  const fav = new Favorite({ userId, food, details });
   await fav.save();
   res.status(201).json(fav);
 });
 app.delete('/api/favorites/:id', ensureAuth, async (req, res) => {
   const { id } = req.params;
-  const result = await Favorite.deleteOne({ _id: id, userId: req.session.userId });
+  const userId = getUserId(req);
+  const result = await Favorite.deleteOne({ _id: id, userId });
   if (result.deletedCount === 0) return res.status(404).json({ error: 'Favorite not found' });
   res.json({ success: true });
 });
-//A
 
 // Get recent entries for the logged-in user
 app.get('/api/recent', ensureAuth, async (req, res) => {
   try {
+    const userId = getUserId(req);
     const limit = parseInt(req.query.limit, 10) || 10;
-    const recentEntries = await Entry.find({ userId: req.session.userId })
+    const recentEntries = await Entry.find({ userId })
       .sort({ date: -1, _id: -1 })
       .limit(limit);
     // Map backend fields to include name, protein, carbs, fat for frontend compatibility

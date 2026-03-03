@@ -11,6 +11,7 @@ Username and profile pic DONE
 Fix Favorite not working DONE
 change password DONE
 
+fix damn mobile version to suport all the normal front end stuff
 login with username
 Live Hosting
 Scan Barcode work on iphone
