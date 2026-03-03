@@ -16,8 +16,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useContext } from 'react';
-import { UserContext } from '../App';
-import MacrosPieChart from '../components/MacrosPieChart';
+import { UserContext } from '../context/UserContext';
 import { getLocalDateString, parseLocalDateString } from '../utils/dateUtils';
 
 // Default API base: Android emulator host mapping. Use your machine IP for physical device testing.
@@ -118,6 +117,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     marginBottom: 20
   },
+  modal: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  modalContent: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 12,
+    padding: 20,
+    width: '100%'
+  },
   dateButton: {
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -155,7 +167,7 @@ const styles = StyleSheet.create({
   }
 });
 
-export default function HomeScreen({ route }) {
+export default function HomeScreen({ route, navigation }) {
   const { user } = useContext(UserContext);
   const { colors: passedColors } = route.params || {};
   const [calories, setCalories] = useState('');
@@ -177,11 +189,24 @@ export default function HomeScreen({ route }) {
   const [showRecent, setShowRecent] = useState(false);
   const [nutritionLoading, setNutritionLoading] = useState(false);
 
+  // limit editing
+  const [limitModalVisible, setLimitModalVisible] = useState(false);
+  const [limitInput, setLimitInput] = useState('');
+
   useEffect(() => {
     loadTodayData();
     loadFavorites();
     loadRecent();
+    fetchDailyLimit();
   }, [selectedDate]);
+
+  useEffect(() => {
+    // whenever the screen gains focus, re-fetch the limit
+    const unsub = navigation.addListener('focus', () => {
+      fetchDailyLimit();
+    });
+    return unsub;
+  }, [navigation]);
 
   const loadTodayData = async () => {
     try {
@@ -202,6 +227,48 @@ export default function HomeScreen({ route }) {
     } catch (err) {
       console.error('Error loading entries:', err);
     }
+  };
+
+  const fetchDailyLimit = async () => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      const res = await axios.get(`${API_BASE}/api/calorie-limit`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDailyLimit(res.data.calorieLimit || 2000);
+    } catch (e) {
+      console.error('Error fetching daily limit', e);
+    }
+  };
+
+  const updateDailyLimit = async (newLimit) => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      await axios.post(
+        `${API_BASE}/api/calorie-limit`,
+        { calorieLimit: newLimit },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setDailyLimit(newLimit);
+      Alert.alert('Success', 'Daily limit updated');
+    } catch (err) {
+      Alert.alert('Error', 'Failed to update daily limit');
+    }
+  };
+
+  const openLimitModal = () => {
+    setLimitInput(String(dailyLimit));
+    setLimitModalVisible(true);
+  };
+
+  const handleSaveLimit = () => {
+    const num = parseInt(limitInput);
+    if (isNaN(num) || num <= 0) {
+      Alert.alert('Error', 'Please enter a valid number');
+      return;
+    }
+    updateDailyLimit(num);
+    setLimitModalVisible(false);
   };
 
   const loadFavorites = async () => {
@@ -485,7 +552,12 @@ export default function HomeScreen({ route }) {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Today's Intake</Text>
         <Text style={styles.cardValue}>{todayCalories}</Text>
-        <Text style={styles.label}>/{dailyLimit} kcal</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={styles.label}>/</Text>
+          <TouchableOpacity onPress={openLimitModal}>
+            <Text style={styles.label}>{dailyLimit} kcal</Text>
+          </TouchableOpacity>
+        </View>
         <View style={{ marginTop: 12, backgroundColor: colors.darkBg, borderRadius: 4, height: 8, overflow: 'hidden' }}>
           <View
             style={{
@@ -499,15 +571,39 @@ export default function HomeScreen({ route }) {
           {getRemainingCalories()} kcal remaining
         </Text>
         <View style={{ alignItems: 'center', marginTop: 16 }}>
-          <MacrosPieChart
-            protein={macroTotals.protein}
-            carbs={macroTotals.carbs}
-            fat={macroTotals.fat}
-            size={100}
-            strokeWidth={12}
-          />
-        </View>
+          </View>
       </View>
+
+      {/* limit edit modal */}
+      <Modal visible={limitModalVisible} transparent animationType="fade">
+        <View style={styles.modal}>
+          <View style={styles.modalContent}>
+            <Text style={[styles.label, { color: colors.textColor }]}>Set Daily Calorie Limit</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. 2000"
+              placeholderTextColor={colors.placeholder}
+              keyboardType="numeric"
+              value={limitInput}
+              onChangeText={setLimitInput}
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+              <TouchableOpacity
+                style={[styles.buttonSecondary, { paddingHorizontal: 16 }]}
+                onPress={() => setLimitModalVisible(false)}
+              >
+                <Text style={styles.buttonTextSecondary}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { paddingHorizontal: 16 }]}
+                onPress={handleSaveLimit}
+              >
+                <Text style={styles.buttonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Log Entry Form */}
       <View style={styles.section}>

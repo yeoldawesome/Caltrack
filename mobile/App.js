@@ -1,4 +1,4 @@
-import React, { useEffect, useState, createContext } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import * as SplashScreen from 'expo-splash-screen';
@@ -27,7 +27,7 @@ const colors = {
   placeholder: '#7b848b'
 };
 
-export const UserContext = createContext({ user: null, setUser: () => {} });
+import { UserContext } from './context/UserContext';
 
 export default function App() {
   const [user, setUser] = useState(null);

@@ -47,30 +47,44 @@ const styles = StyleSheet.create({
 });
 
 export default function EntriesScreen() {
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(getLocalDateString(new Date()));
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [editCalories, setEditCalories] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const [macroTotals, setMacroTotals] = useState({ protein: 0, carbs: 0, fat: 0 });
+  const [dayTotalCalories, setDayTotalCalories] = useState(0);
+  const [dailyLimit, setDailyLimit] = useState(2000);
 
   useEffect(() => {
     loadForDate(selectedDate);
+    fetchDailyLimit();
   }, [selectedDate]);
 
-  const loadForDate = async (date) => {
+  const fetchDailyLimit = async () => {
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      const res = await axios.get(`${API_BASE}/api/calorie-limit`, { headers: { Authorization: `Bearer ${token}` } });
+      setDailyLimit(res.data.calorieLimit || 2000);
+    } catch (e) {
+      console.error('Error fetching daily limit', e);
+    }
+  };
+
+  const loadForDate = async (dateStr) => {
     setLoading(true);
     try {
       const token = await AsyncStorage.getItem('authToken');
-      const dstr = getLocalDateString(date);
-      const res = await axios.get(`${API_BASE}/api/entries/${dstr}`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await axios.get(`${API_BASE}/api/entries/${dateStr}`, { headers: { Authorization: `Bearer ${token}` } });
       const data = res.data || [];
       setEntries(data);
       const p = data.reduce((s, e) => s + (e.protein || 0), 0);
       const c = data.reduce((s, e) => s + (e.carbs || 0), 0);
       const f = data.reduce((s, e) => s + (e.fat || 0), 0);
+      const tot = data.reduce((s, e) => s + (e.calories || 0), 0);
       setMacroTotals({ protein: p, carbs: c, fat: f });
+      setDayTotalCalories(tot);
     } catch (err) {
       console.error('loadForDate error', err);
     } finally {
@@ -128,7 +142,7 @@ export default function EntriesScreen() {
           </View>
           {(e.protein || e.carbs || e.fat) && (
             <Text style={{ color: colors.placeholder, fontSize: 12, marginTop: 8 }}>
-              P:{e.protein}g | C:{e.carbs}g | F:{e.fat}g
+              Protein: {e.protein}g | Carbs: {e.carbs}g | Fat: {e.fat}g
             </Text>
           )}
         </View>
@@ -174,7 +188,7 @@ export default function EntriesScreen() {
   return (
     <ScrollView style={styles.container}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <Text style={styles.title}>{selectedDate.toDateString()}</Text>
+        <Text style={styles.title}>{parseLocalDateString(selectedDate).toDateString()}</Text>
         <TouchableOpacity onPress={() => setShowPicker(true)}>
           <Ionicons name="calendar" size={28} color={colors.accent} />
         </TouchableOpacity>
@@ -185,6 +199,7 @@ export default function EntriesScreen() {
           protein={macroTotals.protein}
           carbs={macroTotals.carbs}
           fat={macroTotals.fat}
+          totalCalories={dayTotalCalories}
           size={140}
           strokeWidth={16}
         />
@@ -198,12 +213,12 @@ export default function EntriesScreen() {
 
       {showPicker && (
         <DateTimePicker
-          value={selectedDate}
+          value={parseLocalDateString(selectedDate)}
           mode="date"
           display="default"
           onChange={(event, date) => {
             setShowPicker(false);
-            if (date) setSelectedDate(date);
+            if (date) setSelectedDate(getLocalDateString(date));
           }}
         />
       )}

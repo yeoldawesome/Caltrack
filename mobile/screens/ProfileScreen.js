@@ -14,7 +14,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { UserContext } from '../App';
+import { UserContext } from '../context/UserContext';
 
 // Default API base for Android emulator. Use your machine IP for a physical device.
 const API_BASE = 'http://10.0.2.2:4000';
@@ -175,6 +175,9 @@ export default function ProfileScreen({ route, navigation }) {
   const [loading, setLoading] = useState(false);
   const [dailyLimit, setDailyLimit] = useState(2000);
   const [currentPassword, setCurrentPassword] = useState('');
+  // custom limit modal
+  const [limitModalVisible, setLimitModalVisible] = useState(false);
+  const [limitInput, setLimitInput] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [newUsername, setNewUsername] = useState('');
@@ -305,6 +308,21 @@ export default function ProfileScreen({ route, navigation }) {
     }
   };
 
+  const openLimitModal = () => {
+    setLimitInput(String(dailyLimit));
+    setLimitModalVisible(true);
+  };
+
+  const handleSaveLimit = () => {
+    const num = parseInt(limitInput);
+    if (isNaN(num) || num <= 0) {
+      Alert.alert('Error', 'Please enter a valid number');
+      return;
+    }
+    updateDailyLimit(num);
+    setLimitModalVisible(false);
+  };
+
   const handleLogout = async () => {
     Alert.alert('Logout', 'Are you sure?', [
       { text: 'Cancel', onPress: () => {} },
@@ -361,7 +379,9 @@ export default function ProfileScreen({ route, navigation }) {
 
         <View style={styles.settingItem}>
           <Text style={styles.settingLabel}>Daily Calorie Limit</Text>
-          <Text style={styles.settingValue}>{dailyLimit} kcal</Text>
+          <TouchableOpacity onPress={openLimitModal}>
+            <Text style={styles.settingValue}>{dailyLimit} kcal</Text>
+          </TouchableOpacity>
         </View>
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
           {[1500, 2000, 2500, 3000].map(limit => (
@@ -387,6 +407,41 @@ export default function ProfileScreen({ route, navigation }) {
             </TouchableOpacity>
           ))}
         </View>
+        <TouchableOpacity
+          style={[styles.buttonSecondary, { paddingHorizontal: 16, marginBottom: 20 }]}
+          onPress={openLimitModal}
+        >
+          <Text style={styles.buttonTextSecondary}>Custom</Text>
+        </TouchableOpacity>
+        <Modal visible={limitModalVisible} transparent animationType="fade">
+          <View style={styles.modal}>
+            <View style={styles.modalContent}>
+              <Text style={[styles.modalTitle, { marginBottom: 8 }]}>Set Daily Calorie Limit</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. 2000"
+                placeholderTextColor={colors.placeholder}
+                keyboardType="numeric"
+                value={limitInput}
+                onChangeText={setLimitInput}
+              />
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+                <TouchableOpacity
+                  style={[styles.buttonSecondary, { paddingHorizontal: 16 }]}
+                  onPress={() => setLimitModalVisible(false)}
+                >
+                  <Text style={styles.buttonTextSecondary}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.button, { paddingHorizontal: 16 }]}
+                  onPress={handleSaveLimit}
+                >
+                  <Text style={styles.buttonText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
 
       {/* Account Section */}

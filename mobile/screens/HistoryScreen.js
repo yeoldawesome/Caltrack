@@ -9,8 +9,9 @@ import {
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { UserContext } from '../App';
+import { UserContext } from '../context/UserContext';
 import MacrosPieChart, { MacrosPieChartWithLabels } from '../components/MacrosPieChart';
+import { parseLocalDateString } from '../utils/dateUtils';
 import { getLocalDateString } from '../utils/dateUtils';
 
 // Default API base for Android emulator. Use your machine IP for a physical device.
@@ -47,6 +48,7 @@ export default function HistoryScreen() {
   const [dayEntries, setDayEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [macroTotals, setMacroTotals] = useState({ protein: 0, carbs: 0, fat: 0 });
+  const [dayTotal, setDayTotal] = useState(0); // calories for selected day
 
   useContext(UserContext); // trigger rerender when user changes
 
@@ -85,15 +87,18 @@ export default function HistoryScreen() {
       const entries = res.data || [];
       setDayEntries(entries);
       setSelectedDate(dateStr);
-      // compute macros
+      // compute macros and total calories
       const p = entries.reduce((s, e) => s + (e.protein || 0), 0);
       const c = entries.reduce((s, e) => s + (e.carbs || 0), 0);
       const f = entries.reduce((s, e) => s + (e.fat || 0), 0);
+      const tot = entries.reduce((s, e) => s + (e.calories || 0), 0);
       setMacroTotals({ protein: p, carbs: c, fat: f });
+      setDayTotal(tot);
     } catch (e) {
       console.error('day fetch failed', e);
       setDayEntries([]);
       setMacroTotals({ protein:0, carbs:0, fat:0 });
+      setDayTotal(0);
     } finally {
       setLoading(false);
     }
@@ -141,8 +146,8 @@ export default function HistoryScreen() {
       </View>
       <View>
         <View style={{ flexDirection: 'row' }}>
-          {['S','M','T','W','T','F','S'].map(d => (
-            <Text key={d} style={{ flex:1, textAlign:'center', color: colors.placeholder, fontSize:12 }}>{d}</Text>
+          {['S','M','T','W','T','F','S'].map((d,i) => (
+            <Text key={`${d}${i}`} style={{ flex:1, textAlign:'center', color: colors.placeholder, fontSize:12 }}>{d}</Text>
           ))}
         </View>
         {getCalendarMatrix().map((week,i) => (
@@ -168,12 +173,13 @@ export default function HistoryScreen() {
       {selectedDate && (
         <>
           <View style={{ alignItems:'center', marginTop:16 }}>
-            <Text style={styles.title}>{new Date(selectedDate).toDateString()}</Text>
+            <Text style={styles.title}>{selectedDate ? parseLocalDateString(selectedDate).toDateString() : ''}</Text>
             <View style={{ marginTop: 12 }}>
               <MacrosPieChartWithLabels 
                 protein={macroTotals.protein} 
                 carbs={macroTotals.carbs} 
                 fat={macroTotals.fat} 
+                totalCalories={dayTotal}
                 size={140}
                 strokeWidth={16}
               />
